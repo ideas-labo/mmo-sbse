@@ -1,0 +1,15 @@
+evoxbench==1.0.5
+faiss_cpu==1.10.0
+hnswlib==0.8.0
+jmetalpy==1.7.0
+lightgbm==4.6.0
+matplotlib==3.9.4
+networkx==3.2.1
+numba==0.60.0
+numpy==1.26.4
+pandas==2.0.3
+pflacco==1.2.2
+scikit_learn==1.3.0
+scipy==1.13.1
+torch==2.7.1
+tqdm==4.67.1
