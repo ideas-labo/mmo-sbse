@@ -78,8 +78,8 @@ MMO-SBSE/
 ### Installation
 1. Clone the repository:
 ```bash
-git clone [repository URL]
-cd MMO-SBSE
+git clone https://github.com/ideas-labo/mmo-sbse.git
+cd mmo-sbse
 ```
 
 2. Create and activate an Anaconda environment:
