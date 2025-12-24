@@ -259,7 +259,7 @@ def execute_optimization(input_file, output_file, population_size, max_evaluatio
     with open(output_file, 'w', newline='') as f:
         writer = csv.writer(f, lineterminator='\n')
         writer.writerow([f"NSGA-II Run for {dataset_name} with seed {random_seed} and mode {mode}"])
-        writer.writerow(["Budget: 50000"])
+        writer.writerow(["Budget: 25000"])
         writer.writerow([])
     try:
         with open(input_file, 'r') as f:
