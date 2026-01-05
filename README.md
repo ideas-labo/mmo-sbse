@@ -203,3 +203,28 @@ python random_predict.py
 ### General-Purpose SBSE Optimizers
 - SWAY: [“Sampling” as a baseline optimizer for search-based software engineering](https://ieeexplore.ieee.org/document/8249828/)
 - LINE and LITE: [BINGO! Simple Optimizers Win Big if Problems Collapse to a Few Buckets](https://ieeexplore.ieee.org/document/7352396)
+
+
+## Data Availability
+
+The raw experimental results and generated datasets supporting the findings of this study are available on Zenodo:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17982397.svg)](https://doi.org/10.5281/zenodo.17982397)
+
+The dataset includes the following components organized by research questions:
+
+### 1. RQ Experimental Results
+- **Complete experimental results for all 10 SBSE problems (224 instances)**:
+  - PMO (Plain Multi-Objectivization) results
+  - MMO results with original auxiliary objectives
+  - MMO results with six different auxiliary objective strategies (as defined in Mode Parameters)
+  - Comparative results with domain-specific SOTA algorithms
+  - Baseline results from general-purpose SBSE optimizers (LINE, LITE, SWAY)
+  - Random Search (RS) benchmark results
+
+### 2. Predictive Modeling Data
+- **Feature data** used for training the auxiliary objective prediction model
+- **Sampling data** used to compute the feature values
+- **Prediction results** of auxiliary objective rankings across all SBSE problem instances
+
+
