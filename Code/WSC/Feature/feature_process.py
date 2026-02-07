@@ -64,64 +64,6 @@ def check_wsc_sampling_data_exists(selected_datasets: List[str], sampling_method
     print("All WSC sampled data (both forward and reverse) exists")
     return True
 
-
-def check_wsc_nsga2_data_exists(selected_datasets: List[str], selected_modes: List[str],
-                                random_seeds: range) -> bool:
-    base_dir = "../../../Results/RQ1-raw-data/WSC"
-
-    if not os.path.exists(base_dir):
-        print(f"WSC NSGA2 directory does not exist: {base_dir}")
-        return False
-
-    missing_files = []
-
-    for dataset in selected_datasets:
-        for mode in selected_modes:
-            for seed in random_seeds:
-                forward_files = [
-                    f"{dataset}_{seed}_{mode}.csv",
-                    f"{dataset}_{seed}_{mode}_fa.csv",
-                    f"{dataset}_{seed}_{mode}_maximization_fa.csv",
-                    f"{dataset}_{seed}_{mode}_g2.csv",
-                ]
-
-                reverse_files = [
-                    f"{dataset}_{seed}_{mode}_reverse.csv",
-                    f"{dataset}_{seed}_{mode}_fa_reverse.csv",
-                    f"{dataset}_{seed}_{mode}_maximization_fa_reverse.csv",
-                    f"{dataset}_{seed}_{mode}_g2_reverse.csv",
-                ]
-
-                found_forward = False
-                for filename in forward_files:
-                    file_path = os.path.join(base_dir, filename)
-                    if os.path.exists(file_path):
-                        found_forward = True
-                        break
-
-                if not found_forward:
-                    missing_files.append(f"Forward: {dataset}, {mode}, seed {seed}")
-                    print(f"Missing WSC forward NSGA2 data: {dataset}, {mode}, seed {seed}")
-
-                found_reverse = False
-                for filename in reverse_files:
-                    file_path = os.path.join(base_dir, filename)
-                    if os.path.exists(file_path):
-                        found_reverse = True
-                        break
-
-                if not found_reverse:
-                    missing_files.append(f"Reverse: {dataset}, {mode}, seed {seed}")
-                    print(f"Missing WSC reverse NSGA2 data: {dataset}, {mode}, seed {seed}")
-
-    if missing_files:
-        print(f"\nTotal missing WSC NSGA2 files: {len(missing_files)}")
-        return False
-    else:
-        print("All WSC NSGA2 data (both forward and reverse) exists")
-        return True
-
-
 def check_wsc_multi_feature_data_exists(selected_datasets: List[str], selected_modes: List[str],
                                         sampling_methods: List[str]) -> bool:
     base_dir = "./Results/Output-draw/"
@@ -227,102 +169,6 @@ def check_wsc_landscape_feature_data_exists(selected_datasets: List[str]) -> boo
     print("All WSC landscape feature data (both forward and reverse) exists")
     return True
 
-
-def extract_info_from_filename(file_name):
-    is_reverse = file_name.endswith("_reverse.csv")
-    if is_reverse:
-        file_name = file_name[:-13]
-    elif file_name.endswith(".csv"):
-        file_name = file_name[:-4]
-
-    parts = file_name.split('_')
-    mode = parts[3]
-    dataset_name = parts[0] + '_' + parts[1]
-    seed = int(parts[2])
-
-    return dataset_name, seed, mode, is_reverse
-
-
-def get_pareto_ratios(csv_path, mode_type='original'):
-    try:
-        with open(csv_path, 'r') as file:
-            lines = file.readlines()
-            is_reverse = csv_path.endswith("_reverse.csv")
-            if mode_type == 'original':
-                budget_line = lines[-5].strip()
-                budget_match = re.search(r'budget_used:(\d+)', budget_line)
-                budget = int(budget_match.group(1)) if budget_match else None
-
-                time_line = lines[-4].strip()
-                time_match = re.search(r'Running time: (\d+\.?\d*) seconds', time_line)
-                time = float(time_match.group(1)) if time_match else None
-
-                best_solution_line = lines[-2].strip()
-                if is_reverse:
-                    ft_match = re.search(r"throughput=(-?\d+\.?\d*)", best_solution_line)
-                else:
-                    ft_match = re.search(r"latency=(-?\d+\.?\d*)", best_solution_line)
-                ft = float(ft_match.group(1)) if ft_match else None
-
-                best_solution_text = next((line for line in lines if "Best Solution" in line), None)
-                if not best_solution_text:
-                    print(f"No 'Best Solution' line found in file {csv_path}")
-                    return None, None, ft, budget, time
-
-                p_match = re.search(r'p: (\d+\.\d+)', best_solution_text)
-                best_p = float(p_match.group(1)) if p_match else None
-
-                p_values_text = next((line for line in lines if "p values until best solution" in line), None)
-                if not p_values_text:
-                    print(f"No 'p values until best solution' line found in file {csv_path}")
-                    return best_p, None, ft, budget, time
-
-                p_values_str_list = p_values_text.split(": ")[1].strip().split(",")
-                p_values = []
-                for p_str in p_values_str_list:
-                    p_str = p_str.strip('"')
-                    try:
-                        p_values.append(float(p_str))
-                    except ValueError:
-                        print(f"Cannot convert p value '{p_str}' to float in file {csv_path}")
-                        return best_p, None, ft, budget, time
-
-                p_values_mean = sum(p_values) / len(p_values) if p_values else None
-
-            elif mode_type == 'adaptive':
-                budget_line = lines[-4].strip()
-                budget_match = re.search(r'budget_used:(\d+)', budget_line)
-                budget = int(budget_match.group(1)) if budget_match else None
-
-                time_line = lines[-3].strip()
-                time_match = re.search(r'Running time: (\d+\.?\d*) seconds', time_line)
-                time = float(time_match.group(1)) if time_match else None
-
-                best_solution_line = lines[-1].strip()
-                ft_match = re.search(r"'ft': (-?\d+\.?\d*)", best_solution_line)
-                ft = float(ft_match.group(1)) if ft_match else None
-
-                p_values = []
-                for line in lines:
-                    if "Generation" in line and "p-value" in line:
-                        p_match = re.search(r'p-value: (\d+\.\d+)', line)
-                        if p_match:
-                            p_values.append(float(p_match.group(1)))
-
-                if not p_values:
-                    print(f"No p-values found in file {csv_path}")
-                    return None, None, ft, budget, time
-
-                best_p = p_values[-1] if p_values else None
-                p_values_mean = sum(p_values) / len(p_values) if p_values else None
-
-            return best_p, p_values_mean, ft, budget, time
-
-    except Exception as e:
-        print(f"Exception processing file {csv_path}: {e}")
-        return None, None, None, None, None
-
-
 def read_landscape_data(landscape_csv_dir, selected_datasets, start_seed, end_seed):
     landscape_dfs = []
 
@@ -359,53 +205,6 @@ def read_landscape_data(landscape_csv_dir, selected_datasets, start_seed, end_se
     median_df = landscape_df.groupby(group_cols, as_index=False)[numeric_cols].median()
 
     print(f"Landscape median data shape: {median_df.shape}")
-    return median_df
-
-
-def read_nsga2_data(nsga2_csv_dir, selected_datasets, start_seed, end_seed, selected_modes, mode_type='original'):
-    p_data = []
-    total_files = 0
-    valid_files = 0
-
-    for file in os.listdir(nsga2_csv_dir):
-        if file.endswith('.csv'):
-            total_files += 1
-            file_name = os.path.basename(file)
-            dataset_name, seed, mode, is_reverse = extract_info_from_filename(file_name)
-
-            if dataset_name in selected_datasets:
-                dataset_name = dataset_name + ('_reverse' if is_reverse else '')
-                if start_seed <= seed <= end_seed and mode in selected_modes:
-                    csv_path = os.path.join(nsga2_csv_dir, file)
-                    best_p, p_values_mean, ft, budget, time = get_pareto_ratios(csv_path, mode_type)
-
-                    if best_p is not None and p_values_mean is not None and budget is not None and time is not None:
-                        valid_files += 1
-                        p_data.append({
-                            'Random Seed': seed,
-                            'Dataset Name': dataset_name,
-                            'Best_Pareto_Ratio': best_p,
-                            'Pareto_Ratios_Mean': p_values_mean,
-                            'mode': mode,
-                            'ft': ft,
-                            'budget': budget,
-                            'time': time,
-                            'is_reverse': is_reverse
-                        })
-
-    print(f"Total files: {total_files}")
-    print(f"Valid files: {valid_files}")
-
-    if not p_data:
-        return pd.DataFrame()
-
-    p_df = pd.DataFrame(p_data)
-
-    group_cols = ['Dataset Name', 'mode', 'is_reverse']
-    numeric_cols = ['Best_Pareto_Ratio', 'Pareto_Ratios_Mean', 'ft', 'budget', 'time', 'Random Seed']
-    numeric_cols = [col for col in numeric_cols if col in p_df.columns]
-
-    median_df = p_df.groupby(group_cols)[numeric_cols].median().reset_index()
     return median_df
 
 
@@ -477,105 +276,170 @@ def read_sampling_data(sampling_csv_dir, selected_datasets, start_seed, end_seed
     return combined_sampling_df
 
 
-def add_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode='ft_only'):
-    ranked_df = p_df.copy()
+def filter_columns_by_nan(df):
+    column_nan_counts = df.isna().sum()
+    columns_to_drop = []
 
-    for (dataset, seed, is_reverse), group in ranked_df.groupby(['Dataset Name', 'Random Seed', 'is_reverse']):
-        base_dataset = dataset.replace("_reverse", "") if is_reverse else dataset
-        if is_reverse:
-            should_maximize = base_dataset in reverse_maximize_datasets
-        else:
-            should_maximize = base_dataset in maximize_datasets
+    for col in df.columns:
+        current_col_nan = column_nan_counts[col]
 
-        if ranking_mode == 'ft_only':
-            if should_maximize:
-                ranked_df.loc[group.index, 'ft_rank'] = group['ft'].rank(ascending=False, method='min')
+        if current_col_nan > 10:
+            nan_row_indices = df[df[col].isna()].index
+
+            row_nan_counts = df.loc[nan_row_indices].isna().sum(axis=1)
+
+            if (row_nan_counts <= 10).all():
+                columns_to_drop.append(col)
+
+    if columns_to_drop:
+        print(f"\nColumns meeting NaN criteria will be dropped (count={len(columns_to_drop)}):")
+        for col in columns_to_drop:
+            print(f"- {col} (NaN count: {column_nan_counts[col]})")
+        return df.drop(columns=columns_to_drop)
+    else:
+        print("\nNo columns met the NaN criteria")
+        return df
+
+
+def load_external_ranking_info(ranking_csv_path):
+    """
+    Load ranking information from external ranking result CSV file
+
+    Parameters:
+        ranking_csv_path: Path to the ranking result CSV file
+
+    Returns:
+        ranking_dict: Dictionary with keys (dataset_name, mode, is_reverse) and ranking info
+    """
+    if not os.path.exists(ranking_csv_path):
+        print(f"[ERROR] External ranking result file does not exist: {ranking_csv_path}")
+        print("[ERROR] Please run the ranking analysis code first to generate ranking results")
+        return None
+
+    try:
+        ranking_df = pd.read_csv(ranking_csv_path)
+
+        # Check required columns
+        required_cols = ['Dataset Name', 'mode', 'unique_rank']
+        missing_cols = [col for col in required_cols if col not in ranking_df.columns]
+        if missing_cols:
+            print(f"[ERROR] Ranking result file missing required columns: {missing_cols}")
+            print(f"Available columns: {ranking_df.columns.tolist()}")
+            return None
+
+        ranking_dict = {}
+        for _, row in ranking_df.iterrows():
+            dataset_name = row['Dataset Name']
+            mode = row['mode']
+            unique_rank = row['unique_rank']
+
+            # Handle reverse datasets (check if dataset name contains _reverse)
+            is_reverse = '_reverse' in dataset_name
+
+            # Create unique key (dataset, mode, is_reverse)
+            key = (dataset_name, mode, is_reverse)
+            ranking_dict[key] = {
+                'unique_rank': unique_rank,
+
+            }
+
+        print(
+            f"[INFO] Loaded ranking information for {len(ranking_dict)} dataset-mode combinations from {ranking_csv_path}")
+        return ranking_dict
+
+    except Exception as e:
+        print(f"[ERROR] Failed to read ranking result file: {e}")
+        return None
+
+
+def create_ranking_df_from_external_wsc(selected_datasets, selected_modes, ranking_dict, include_reverse=True):
+    """
+    Create WSC ranking DataFrame from external ranking information
+
+    Parameters:
+        selected_datasets: Selected dataset list
+        selected_modes: Selected mode list
+        ranking_dict: Ranking dictionary loaded from CSV
+        include_reverse: Whether to include reverse datasets
+
+    Returns:
+        ranking_df: DataFrame containing ranking information
+    """
+    ranking_data = []
+
+    # Create all datasets including reverse if needed
+    all_selected_datasets = selected_datasets
+    if include_reverse:
+        all_selected_datasets = selected_datasets + [f"{ds}_reverse" for ds in selected_datasets]
+
+    for dataset_name in all_selected_datasets:
+        # Determine if this is a reverse dataset
+        is_reverse = dataset_name.endswith("_reverse") if include_reverse else False
+
+        # Extract base dataset name (without _reverse suffix for matching)
+        base_dataset = dataset_name
+
+        for mode in selected_modes:
+            # Create key for lookup (using base dataset name)
+            key = (base_dataset, mode, is_reverse)
+
+            # Try to find ranking info
+            if key in ranking_dict:
+                rank_info = ranking_dict[key]
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': rank_info['unique_rank'],
+
+                })
             else:
-                ranked_df.loc[group.index, 'ft_rank'] = group['ft'].rank(ascending=True, method='min')
+                # If not found, use default ranking
+                print(
+                    f"[WARNING] No ranking info found for dataset '{dataset_name}', mode '{mode}', reverse={is_reverse}, using default rank 1")
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': 1,
 
-        elif ranking_mode == 'ft_time':
-            if should_maximize:
-                ranked_df.loc[group.index, 'ft_rank'] = group.sort_values(
-                    by=['ft', 'time'], ascending=[False, True]
-                ).groupby('ft', sort=False).ngroup() + 1
-            else:
-                ranked_df.loc[group.index, 'ft_rank'] = group.sort_values(
-                    by=['ft', 'time'], ascending=[True, True]
-                ).groupby('ft', sort=False).ngroup() + 1
+                })
 
-        elif ranking_mode == 'ft_mode':
-            group_with_prio = group.copy()
-            group_with_prio['mode_priority'] = group_with_prio['mode'].map(MODE_PRIORITY_ORDER)
-
-            if should_maximize:
-                sorted_group = group_with_prio.sort_values(
-                    by=['ft', 'mode_priority'], ascending=[False, True]
-                )
-            else:
-                sorted_group = group_with_prio.sort_values(
-                    by=['ft', 'mode_priority'], ascending=[True, True]
-                )
-
-            sorted_group['ft_rank'] = range(1, len(sorted_group) + 1)
-
-            ranked_df.loc[sorted_group.index, 'ft_rank'] = sorted_group['ft_rank']
-
-        ranked_df.loc[group.index, 'time_rank'] = group['time'].rank(ascending=True, method='min')
-
-        ranked_df.loc[group.index, 'budget_rank'] = group['budget'].rank(ascending=True, method='min')
-
-        if ranking_mode == 'ft_only':
-            if should_maximize:
-                optimal_ft = group['ft'].max()
-                optimal_rows = group[group['ft'] == optimal_ft]
-            else:
-                optimal_ft = group['ft'].min()
-                optimal_rows = group[group['ft'] == optimal_ft]
-
-            optimal_best_p = optimal_rows['Best_Pareto_Ratio'].mean()
-            optimal_p_mean = optimal_rows['Pareto_Ratios_Mean'].mean()
-
-        elif ranking_mode == 'ft_time':
-            if should_maximize:
-                sorted_group = group.sort_values(by=['ft', 'time'], ascending=[False, True])
-                optimal_ft = sorted_group['ft'].max()
-                optimal_rows = sorted_group[sorted_group['ft'] == optimal_ft].head(1)
-            else:
-                sorted_group = group.sort_values(by=['ft', 'time'], ascending=[True, True])
-                optimal_ft = sorted_group['ft'].min()
-                optimal_rows = sorted_group[sorted_group['ft'] == optimal_ft].head(1)
-
-            optimal_best_p = optimal_rows['Best_Pareto_Ratio'].mean()
-            optimal_p_mean = optimal_rows['Pareto_Ratios_Mean'].mean()
-
-        elif ranking_mode == 'ft_mode':
-            group_with_prio = group.copy()
-            group_with_prio['mode_priority'] = group_with_prio['mode'].map(MODE_PRIORITY_ORDER)
-
-            if should_maximize:
-                sorted_group = group_with_prio.sort_values(by=['ft', 'mode_priority'], ascending=[False, True])
-                optimal_ft = sorted_group['ft'].max()
-                optimal_rows = sorted_group[sorted_group['ft'] == optimal_ft].head(1)
-            else:
-                sorted_group = group_with_prio.sort_values(by=['ft', 'mode_priority'], ascending=[True, True])
-                optimal_ft = sorted_group['ft'].min()
-                optimal_rows = sorted_group[sorted_group['ft'] == optimal_ft].head(1)
-
-            optimal_best_p = optimal_rows['Best_Pareto_Ratio'].mean()
-            optimal_p_mean = optimal_rows['Pareto_Ratios_Mean'].mean()
-
-        ranked_df.loc[group.index, 'Optimal_Best_Pareto_Ratio'] = optimal_best_p
-        ranked_df.loc[group.index, 'Optimal_Pareto_Ratios_Mean'] = optimal_p_mean
-
-        ranked_df.loc[group.index, 'Percent_Diff_Best_P'] = abs(group['Best_Pareto_Ratio'] - optimal_best_p)
-        ranked_df.loc[group.index, 'Percent_Diff_P_Mean'] = abs(group['Pareto_Ratios_Mean'] - optimal_p_mean)
-
-    return ranked_df
+    if ranking_data:
+        ranking_df = pd.DataFrame(ranking_data)
+        print(f"[INFO] Created ranking DataFrame with {len(ranking_df)} rows for WSC")
+        return ranking_df
+    else:
+        print("[WARNING] Failed to create any WSC ranking information")
+        return pd.DataFrame()
 
 
-def process_datasets(landscape_df, p_df, combined_sampling_df, selected_datasets, selected_modes,
-                           maximize_datasets, reverse_maximize_datasets, ranking_mode='ft_only'):
-    p_df = add_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode)
+def process_data_with_external_ranking(start_seed, end_seed, selected_modes, selected_datasets, pic_types, data_mode,
+                                       ranking_df, maximize_datasets, reverse_maximize_datasets):
+    """
+    Process WSC data using external ranking information instead of NSGA2 data
+
+    Parameters:
+        start_seed: Starting random seed
+        end_seed: Ending random seed
+        selected_modes: List of selected modes
+        selected_datasets: List of selected datasets
+        pic_types: List of picture types
+        data_mode: Data extraction mode
+        ranking_df: Ranking DataFrame from external ranking file
+        maximize_datasets: List of datasets to maximize
+        reverse_maximize_datasets: List of reverse datasets to maximize
+
+    Returns:
+        final_df: Processed DataFrame with ranking information
+    """
+    # Read landscape feature data and sampling data (these are still needed)
+    landscape_df = read_landscape_data('./Results/real_data/', selected_datasets, start_seed, end_seed)
+
+    if data_mode == 'three_datasets':
+        combined_sampling_df = read_sampling_data('./Results/Output-draw/', selected_datasets,
+                                                  start_seed, end_seed, selected_modes, pic_types)
+    else:
+        print("Invalid data extraction mode, choose 'three_datasets'.")
+        return None
 
     if 'Sampling Method' in landscape_df.columns and 'Sampling Method' in combined_sampling_df.columns and 'Sample Size' in landscape_df.columns and 'Sample Size' in combined_sampling_df.columns:
         sampling_methods = pd.concat(
@@ -584,6 +448,7 @@ def process_datasets(landscape_df, p_df, combined_sampling_df, selected_datasets
 
         combined_dfs = []
         all_selected_datasets = [ds + '_reverse' for ds in selected_datasets] + selected_datasets
+
         for dataset_name in all_selected_datasets:
             is_reverse = dataset_name.endswith("_reverse")
             base_dataset = dataset_name.replace("_reverse", "")
@@ -623,115 +488,58 @@ def process_datasets(landscape_df, p_df, combined_sampling_df, selected_datasets
                         landscape_filtered = landscape_filtered.reset_index(drop=True)
                         sampling_filtered = sampling_filtered.reset_index(drop=True)
 
-                        combined_df = pd.merge(
-                            landscape_filtered,
-                            sampling_filtered,
-                            on=['Dataset Name', 'Random Seed', 'Sample Size', 'Sampling Method'],
-                            how='inner'
-                        )
+                        # Merge landscape and sampling data
+                        if not landscape_filtered.empty and not sampling_filtered.empty:
+                            combined_df = pd.merge(
+                                landscape_filtered,
+                                sampling_filtered,
+                                on=['Dataset Name', 'Random Seed', 'Sample Size', 'Sampling Method'],
+                                how='inner'
+                            )
 
-                        p_df_filtered = p_df[(p_df['Dataset Name'] == dataset_name) & (p_df['mode'] == mode)].copy()
-                        p_df_filtered = p_df_filtered.sort_values(by=['Random Seed'])
-                        p_df_filtered = p_df_filtered.reset_index(drop=True)
+                            # Get ranking information for this dataset and mode
+                            ranking_filtered = ranking_df[(ranking_df['Dataset Name'] == dataset_name) &
+                                                          (ranking_df['mode'] == mode)].copy()
 
-                        p_columns_to_keep = [
-                            'Random Seed', 'Dataset Name', 'mode',
-                            'Best_Pareto_Ratio', 'Pareto_Ratios_Mean',
-                            'ft', 'budget', 'time',
-                            'ft_rank', 'time_rank', 'budget_rank',
-                            'Optimal_Best_Pareto_Ratio', 'Optimal_Pareto_Ratios_Mean',
-                            'Percent_Diff_Best_P', 'Percent_Diff_P_Mean'
-                        ]
-                        p_df_filtered = p_df_filtered[p_columns_to_keep]
+                            if not ranking_filtered.empty:
+                                # Merge ranking information
+                                combined_df = pd.merge(
+                                    combined_df,
+                                    ranking_filtered,
+                                    on=['Dataset Name', 'mode'],
+                                    how='left'
+                                )
 
-                        combined_df = pd.merge(
-                            combined_df,
-                            p_df_filtered,
-                            on=['Dataset Name', 'Random Seed', 'mode'],
-                            how='left'
-                        )
+                                combined_dfs.append(combined_df)
 
-                        combined_dfs.append(combined_df)
+        if combined_dfs:
+            all_combined_df = pd.concat(combined_dfs, ignore_index=True)
+            print(f"All combined data shape: {all_combined_df.shape}")
 
-        all_combined_df = pd.concat(combined_dfs, ignore_index=True)
-        print(f"All combined data shape: {all_combined_df.shape}")
+            all_combined_df = all_combined_df.loc[:, ~all_combined_df.columns.duplicated()]
 
-        all_combined_df = all_combined_df.loc[:, ~all_combined_df.columns.duplicated()]
+            # Define columns to keep (with ranking information)
+            columns_to_keep = [
+                'Random Seed', 'Dataset Name', 'mode', 'Sample Size', 'Sampling Method',
+                'ft_rank'
+            ]
 
-        columns_to_keep = [
-            'Random Seed', 'Dataset Name', 'mode', 'Sample Size', 'Sampling Method',
-            'Best_Pareto_Ratio', 'Pareto_Ratios_Mean',
-            'ft', 'budget', 'time',
-            'ft_rank', 'time_rank', 'budget_rank',
-            'Optimal_Best_Pareto_Ratio', 'Optimal_Pareto_Ratios_Mean',
-            'Percent_Diff_Best_P', 'Percent_Diff_P_Mean'
-        ]
+            numeric_columns = all_combined_df.select_dtypes(include=['number']).columns
+            columns_to_keep.extend([col for col in numeric_columns if col not in columns_to_keep])
 
-        numeric_columns = all_combined_df.select_dtypes(include=['number']).columns
-        columns_to_keep.extend([col for col in numeric_columns if col not in columns_to_keep])
+            X_numeric = all_combined_df[columns_to_keep].dropna(axis=1, how='all')
+            X_numeric = X_numeric.reset_index(drop=True)
+            print(f"X_numeric data shape: {X_numeric.shape}")
 
-        X_numeric = all_combined_df[columns_to_keep].dropna(axis=1, how='all')
-        X_numeric = X_numeric.reset_index(drop=True)
-        print(f"X_numeric data shape: {X_numeric.shape}")
+            # Filter by available ranking data
+            if 'ft_rank' in X_numeric.columns:
+                X_numeric = X_numeric[X_numeric['ft_rank'].notna()].reset_index(drop=True)
 
-        X_numeric = X_numeric[
-            X_numeric['Random Seed'].isin(p_df['Random Seed']) &
-            X_numeric['mode'].isin(p_df['mode']) &
-            X_numeric['Dataset Name'].isin(p_df['Dataset Name'])
-            ].reset_index(drop=True)
+            print(f"Final data shape: {X_numeric.shape}")
+            return X_numeric
 
-        print(f"Final data shape: {X_numeric.shape}")
-        return X_numeric
     print("Sampling Method and Sample Size columns do not match, cannot continue processing.")
     return None
-
-
-def filter_columns_by_nan(df):
-    column_nan_counts = df.isna().sum()
-    columns_to_drop = []
-
-    for col in df.columns:
-        current_col_nan = column_nan_counts[col]
-
-        if current_col_nan > 10:
-            nan_row_indices = df[df[col].isna()].index
-
-            row_nan_counts = df.loc[nan_row_indices].isna().sum(axis=1)
-
-            if (row_nan_counts <= 10).all():
-                columns_to_drop.append(col)
-
-    if columns_to_drop:
-        print(f"\nColumns meeting NaN criteria will be dropped (count={len(columns_to_drop)}):")
-        for col in columns_to_drop:
-            print(f"- {col} (NaN count: {column_nan_counts[col]})")
-        return df.drop(columns=columns_to_drop)
-    else:
-        print("\nNo columns met the NaN criteria")
-        return df
-
-
-def process_data(start_seed, end_seed, selected_modes, selected_datasets, pic_types, data_mode,
-                 maximize_datasets, reverse_maximize_datasets, ranking_mode='ft_only'):
-    landscape_df = read_landscape_data('./Results/real_data/', selected_datasets, start_seed,
-                                       end_seed)
-    p_df = read_nsga2_data('../../../Results/RQ1-raw-data/WSC', selected_datasets,
-                           start_seed, end_seed, selected_modes)
-
-    if data_mode == 'three_datasets':
-        combined_sampling_df = read_sampling_data('./Results/Output-draw/', selected_datasets,
-                                                  start_seed, end_seed, selected_modes, pic_types)
-        final_df = process_datasets(landscape_df, p_df, combined_sampling_df, selected_datasets, selected_modes,
-                                          maximize_datasets, reverse_maximize_datasets, ranking_mode)
-    else:
-        print("Invalid data extraction mode, choose 'three_datasets'.")
-        final_df = None
-
-    if final_df is not None and not final_df.empty:
-        print("Starting NaN-based column filtering...")
-        final_df = filter_columns_by_nan(final_df)
-
-    return final_df
 
 
 def coordinated_pipeline_wsc(
@@ -751,32 +559,48 @@ def coordinated_pipeline_wsc(
         maximize_datasets=None,
         reverse_maximize_datasets=None,
         ranking_mode='ft_mode',
-        workflow_base_path='../Datasets/Original_data/'
+        workflow_base_path='../Datasets/Original_data/',
+        ranking_csv_path=None  # New parameter: ranking result CSV file path
 ):
     if selected_datasets is None:
         selected_datasets = ["workflow_1", "workflow_2", "workflow_3", "workflow_4", "workflow_5",
                              "workflow_6", "workflow_7", "workflow_8", "workflow_9", "workflow_10"]
+
     if selected_modes is None:
         selected_modes = ['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity']
+
     if sampling_methods is None:
         sampling_methods = ['sobol', 'orthogonal', 'stratified', 'latin_hypercube', 'monte_carlo', 'covering_array']
+
     if random_seeds is None:
         random_seeds = range(0, 10)
+
     if fa_construction is None:
         fa_construction = ['g1', 'penalty', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity']
+
     if start_seed is None:
         start_seed = min(random_seeds)
+
     if end_seed is None:
         end_seed = max(random_seeds)
+
     if pic_types is None:
         pic_types = ['PMO', 'MMO']
+
     if maximize_datasets is None:
         maximize_datasets = []
+
     if reverse_maximize_datasets is None:
         reverse_maximize_datasets = selected_datasets
 
+    # Check if ranking_csv_path is provided
+    if ranking_csv_path is None:
+        print("[ERROR] Must provide ranking_csv_path parameter to specify ranking result CSV file path")
+        print("[ERROR] Please run ranking analysis code first to generate ranking results, then specify file path")
+        return None
+
     print("=" * 60)
-    print("Starting WSC Coordinated Data Processing Pipeline")
+    print("Starting WSC (Workflow Scheduling with Cost) Coordinated Data Processing Pipeline")
     print("=" * 60)
     print(f"Configuration:")
     print(f"  Datasets: {selected_datasets}")
@@ -784,11 +608,22 @@ def coordinated_pipeline_wsc(
     print(f"  Sampling methods: {sampling_methods}")
     print(f"  Random seeds: {list(random_seeds)}")
     print(f"  Sample size: {num_samples}")
-    print(f"  FA constructions: {fa_construction}")
     print(f"  Processing both forward and reverse data")
     print(f"  Number of datasets: {len(selected_datasets)}")
+    print(f"  External ranking file: {ranking_csv_path}")
     print("=" * 60)
 
+    # Load external ranking information
+    print(f"\n[INFO] Loading external ranking information from: {ranking_csv_path}")
+    external_ranking_dict = load_external_ranking_info(ranking_csv_path)
+
+    if external_ranking_dict is None:
+        print(
+            "[ERROR] Cannot load external ranking information, please ensure ranking result file exists and format is correct")
+        print("[ERROR] Please run ranking analysis code first to generate ranking result file")
+        return None
+
+    # Data checking stages (keep these as they are needed for other data)
     print("\nStage 1: Check WSC sampled data (both forward and reverse)")
     sampling_data_exists = check_wsc_sampling_data_exists(
         selected_datasets, sampling_methods, num_samples, random_seeds
@@ -798,6 +633,8 @@ def coordinated_pipeline_wsc(
         print("Starting to generate WSC sampled data...")
 
         print("Generating forward sampled data...")
+        # Import here to avoid circular imports
+        from Code.WSC.Feature.multi_feature import main_wsc_multi
         main_wsc_multi(
             dataset_names=selected_datasets,
             fa_construction=['g1'],
@@ -841,6 +678,8 @@ def coordinated_pipeline_wsc(
         print("Starting WSC multi-objective feature computation...")
 
         print("Computing forward multi-objective features...")
+        # Import here to avoid circular imports
+        from Code.WSC.Feature.multi_feature import main_wsc_multi
         main_wsc_multi(
             dataset_names=selected_datasets,
             fa_construction=fa_construction,
@@ -882,6 +721,8 @@ def coordinated_pipeline_wsc(
         print("Starting WSC landscape feature computation...")
 
         print("Computing forward landscape features...")
+        # Import here to avoid circular imports
+        from Code.WSC.Feature.single_feature import main_wsc_single
         main_wsc_single(
             dataset_names=selected_datasets,
             sampling_methods=sampling_methods,
@@ -908,32 +749,41 @@ def coordinated_pipeline_wsc(
     else:
         print("WSC landscape feature data exists, skipping computation stage")
 
-    print("\nStage 4: Check WSC NSGA2 data (both forward and reverse)")
-    nsga2_data_exists = check_wsc_nsga2_data_exists(selected_datasets, selected_modes, random_seeds)
+    print("\nStage 4: Using external ranking information")
+    print("[INFO] Skipping NSGA2 data reading, using external ranking information only")
 
-    if not nsga2_data_exists:
-        print("Warning: Some WSC NSGA2 data is missing. Ensure NSGA2 has been run and produced results")
-        print("Proceeding with available data...")
+    print("\nStage 5: WSC Data merging and processing with external ranking (both forward and reverse)")
 
-    print("\nStage 5: WSC Data merging and processing (both forward and reverse)")
+    # Create ranking DataFrame from external ranking information
+    ranking_df = create_ranking_df_from_external_wsc(selected_datasets, selected_modes, external_ranking_dict,
+                                                     include_reverse=True)
 
-    processed_data = process_data(
+    if ranking_df.empty:
+        print("[ERROR] Failed to create ranking DataFrame from external ranking information")
+        return None
+
+    # Process data using external ranking
+    processed_data = process_data_with_external_ranking(
         start_seed=start_seed,
         end_seed=end_seed,
         selected_modes=selected_modes,
         selected_datasets=selected_datasets,
         pic_types=pic_types,
         data_mode=data_mode,
+        ranking_df=ranking_df,
         maximize_datasets=maximize_datasets,
         reverse_maximize_datasets=reverse_maximize_datasets,
-        ranking_mode=ranking_mode,
     )
 
     if processed_data is not None:
+        print("Starting NaN-based column filtering...")
+        processed_data = filter_columns_by_nan(processed_data)
+
         output_folder = '../../../Results/Predict-raw-data/ProcessedData'
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
+        # Use external ranking output filename
         output_filename = 'processed_data_wsc.csv'
         output_path = os.path.join(output_folder, output_filename)
         processed_data.to_csv(output_path, index=False)
@@ -945,11 +795,16 @@ def coordinated_pipeline_wsc(
         print(f"Numeric columns: {len(processed_data.select_dtypes(include=[np.number]).columns)}")
         print(f"Categorical columns: {len(processed_data.select_dtypes(include=['object']).columns)}")
 
-        if 'Dataset Name' in processed_data.columns:
-            dataset_counts = processed_data['Dataset Name'].value_counts()
-            print(f"\nDataset distribution:")
-            for dataset, count in dataset_counts.items():
-                print(f"  {dataset}: {count} rows")
+        # Check if ranking columns are included
+        if 'ft_rank' in processed_data.columns:
+            print(f"\nRanking statistics:")
+            rank_stats = processed_data['ft_rank'].value_counts().sort_index()
+            for rank, count in rank_stats.items():
+                print(f"  Rank {rank}: {count} rows")
+
+        if 'is_best_mode' in processed_data.columns:
+            best_count = processed_data['is_best_mode'].sum()
+            print(f"  Best mode count: {best_count}")
 
         forward_count = len([ds for ds in processed_data['Dataset Name'] if not ds.endswith('_reverse')])
         reverse_count = len([ds for ds in processed_data['Dataset Name'] if ds.endswith('_reverse')])
@@ -957,7 +812,7 @@ def coordinated_pipeline_wsc(
         print(f"Reverse data rows: {reverse_count}")
 
         print("\n" + "=" * 60)
-        print("WSC Data processing pipeline completed")
+        print("WSC Data processing pipeline completed using external ranking information")
         print("=" * 60)
 
         return processed_data
@@ -966,10 +821,14 @@ def coordinated_pipeline_wsc(
         return None
 
 
+# 修改主调用部分
 if __name__ == "__main__":
+    # Must provide ranking result CSV file path
+    ranking_csv_path = '../../../Results/Predict-raw-data/Ranking/non_ft_modes_ranking_wsc.csv'
+
     processed_data = coordinated_pipeline_wsc(
         selected_datasets=["workflow_1", "workflow_2", "workflow_3", "workflow_4", "workflow_5",
-                             "workflow_6", "workflow_7", "workflow_8", "workflow_9", "workflow_10"],
+                           "workflow_6", "workflow_7", "workflow_8", "workflow_9", "workflow_10"],
         selected_modes=['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity'],
         sampling_methods=['sobol', 'orthogonal', 'stratified', 'latin_hypercube', 'monte_carlo', 'covering_array'],
         random_seeds=range(0, 10),
@@ -981,5 +840,6 @@ if __name__ == "__main__":
         pic_types=['PMO', 'MMO'],
         workflow_base_path='../Datasets/Original_data/',
         maximize_datasets=[],
-        reverse_maximize_datasets=["workflow_1", "workflow_2"]
+        reverse_maximize_datasets=["workflow_1", "workflow_2"],
+        ranking_csv_path=ranking_csv_path  # Required parameter
     )
