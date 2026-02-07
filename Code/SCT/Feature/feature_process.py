@@ -58,81 +58,82 @@ def check_sct_sampling_data_exists(selected_datasets: List[str], sampling_method
     return True
 
 
-def check_sct_nsga2_data_exists(selected_datasets: List[str], selected_modes: List[str],
-                                random_seeds: range) -> bool:
-    base_dir = "../../../Results/RQ1-raw-data/SCT"
+def load_external_ranking_info(ranking_csv_path):
+    if not os.path.exists(ranking_csv_path):
 
-    if not os.path.exists(base_dir):
-        print(f"SCT NSGA2 directory does not exist: {base_dir}")
-        return False
+        return None
 
-    missing_files = []
+    try:
+        ranking_df = pd.read_csv(ranking_csv_path)
 
-    for dataset in selected_datasets:
+
+        required_cols = ['Dataset Name', 'mode', 'unique_rank']
+        missing_cols = [col for col in required_cols if col not in ranking_df.columns]
+        if missing_cols:
+
+            return None
+
+        ranking_dict = {}
+        for _, row in ranking_df.iterrows():
+            dataset_name = row['Dataset Name']
+            mode = row['mode']
+            unique_rank = row['unique_rank']
+
+            key = (dataset_name, mode)
+            ranking_dict[key] = {
+                'unique_rank': unique_rank,
+            }
+
+        return ranking_dict
+
+    except Exception as e:
+        return None
+
+
+def create_ranking_df_from_external(selected_datasets, selected_modes, ranking_dict):
+
+    ranking_data = []
+
+    all_selected_datasets = selected_datasets + [f"{ds}_reverse" for ds in selected_datasets]
+
+    for dataset_name in all_selected_datasets:
         for mode in selected_modes:
-            for seed in random_seeds:
-                # reciprocal applicability rules:
-                # - forward (non-reverse): reciprocal not applicable for ['dnn_adiac','dnn_dsr','dnn_sa']
-                # - reverse: reciprocal not applicable for base dataset 'x264'
-                skip_forward_reciprocal = False
-                skip_reverse_reciprocal = False
-                if mode == 'reciprocal':
-                    if dataset in ['dnn_adiac', 'dnn_dsr', 'dnn_sa']:
-                        skip_forward_reciprocal = True
-                    if dataset == 'x264':
-                        skip_reverse_reciprocal = True
+            if mode == 'reciprocal':
+                is_reverse = dataset_name.endswith('_reverse')
+                base_dataset = dataset_name.replace('_reverse', '') if is_reverse else dataset_name
 
-                forward_files = [
-                    f"{dataset}-{seed}_{mode}.csv",
-                    f"{dataset}-{seed}_{mode}_fa.csv",
-                    f"{dataset}-{seed}_{mode}_maximization_fa.csv",
-                    f"{dataset}-{seed}_{mode}_g2.csv",
-                ]
+                if not is_reverse and base_dataset in ['dnn_adiac', 'dnn_dsr', 'dnn_sa']:
+                    continue
+                if is_reverse and base_dataset == 'x264':
+                    continue
 
-                reverse_files = [
-                    f"{dataset}-{seed}_{mode}_reverse.csv",
-                    f"{dataset}-{seed}_{mode}_fa_reverse.csv",
-                    f"{dataset}-{seed}_{mode}_maximization_fa_reverse.csv",
-                    f"{dataset}-{seed}_{mode}_g2_reverse.csv",
-                ]
+            key = (dataset_name, mode)
 
-                # check forward files unless explicitly skipped by reciprocal rule
-                found_forward = False
-                if skip_forward_reciprocal:
-                    found_forward = True
-                else:
-                    for filename in forward_files:
-                        file_path = os.path.join(base_dir, filename)
-                        if os.path.exists(file_path):
-                            found_forward = True
-                            break
+            if key not in ranking_dict and dataset_name.endswith('_reverse'):
+                base_dataset = dataset_name[:-8]
+                key_alt = (base_dataset, mode)
+                if key_alt in ranking_dict:
+                    key = key_alt
 
-                if not found_forward:
-                    missing_files.append(f"Forward: {dataset}, {mode}, seed {seed}")
-                    print(f"Missing SCT forward NSGA2 data: {dataset}, {mode}, seed {seed}")
+            if key in ranking_dict:
+                rank_info = ranking_dict[key]
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': rank_info['unique_rank']
+                })
+            else:
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': 1,
+                })
 
-                # check reverse files unless explicitly skipped by reciprocal rule
-                found_reverse = False
-                if skip_reverse_reciprocal:
-                    found_reverse = True
-                else:
-                    for filename in reverse_files:
-                        file_path = os.path.join(base_dir, filename)
-                        if os.path.exists(file_path):
-                            found_reverse = True
-                            break
-
-                if not found_reverse:
-                    missing_files.append(f"Reverse: {dataset}, {mode}, seed {seed}")
-                    print(f"Missing SCT reverse NSGA2 data: {dataset}, {mode}, seed {seed}")
-
-    if missing_files:
-        print(f"\nTotal missing SCT NSGA2 files: {len(missing_files)}")
-        return False
+    if ranking_data:
+        ranking_df = pd.DataFrame(ranking_data)
+        return ranking_df
     else:
-        print("All SCT NSGA2 data (both forward and reverse) exists")
-        return True
-
+        return pd.DataFrame()
 
 def check_sct_multi_feature_data_exists(selected_datasets: List[str], selected_modes: List[str],
                                         sampling_methods: List[str]) -> bool:
@@ -247,144 +248,6 @@ def check_sct_landscape_feature_data_exists(selected_datasets: List[str]) -> boo
 
     print("All SCT landscape feature data (both forward and reverse) exists")
     return True
-
-
-def extract_info_from_filename_sct(file_name):
-    if file_name.endswith(".csv"):
-        file_name = file_name[:-4]
-
-    is_reverse = False
-    if "_reverse" in file_name:
-        file_name = file_name.replace("_reverse", "")
-        is_reverse = True
-
-    parts = file_name.split('-')
-
-    if len(parts) >= 2:
-        dataset_name = parts[0]
-        remaining_parts = parts[1].split('_')
-
-        seed = remaining_parts[0]
-        mode = remaining_parts[1]
-
-        return dataset_name, mode, is_reverse, seed
-    else:
-        print(f"Unable to parse filename: {file_name}")
-        return None, None, None, None
-
-
-def get_pareto_ratios_sct(csv_path):
-    try:
-        with open(csv_path, 'r') as file:
-            lines = file.readlines()
-
-            best_solution_text = next((line for line in lines if "Best Solution" in line), None)
-            if best_solution_text is None:
-                print(f"No 'Best Solution' line found in file {csv_path}")
-                return None, None, None, None, None
-
-            p_match = re.search(r'p: (\d+\.\d+)', best_solution_text)
-            if p_match:
-                best_p = float(p_match.group(1))
-            else:
-                print(f"Unable to extract best Pareto ratio from file {csv_path}; please check file format.")
-                return None, None, None, None, None
-
-            p_values_text = next((line for line in lines if "p values until best solution" in line), None)
-            if p_values_text is None:
-                print(f"No 'p values until best solution' line found in file {csv_path}")
-                return None, None, None, None, None
-
-            p_values_str_list = p_values_text.split(": ")[1].strip().split(",")
-
-            p_values = []
-            for p_str in p_values_str_list:
-                p_str = p_str.strip('"')
-                try:
-                    p = float(p_str)
-                    p_values.append(p)
-                except ValueError:
-                    print(f"Unable to convert p value '{p_str}' to float in file {csv_path}; please check value format.")
-                    return None, None, None, None, None
-
-            p_values_mean = sum(p_values) / len(p_values)
-
-            ft_line = lines[-2].strip()
-            ft_match = re.search(r"'ft': (-?\d+\.?\d*)", ft_line)
-            if ft_match:
-                ft = float(ft_match.group(1))
-            else:
-                print(f"Unable to extract ft value from file {csv_path}; please check file format.")
-                ft = None
-
-            budget_line = lines[-5].strip()
-            budget_match = re.search(r'budget_used:(\d+)', budget_line)
-            if budget_match:
-                budget = int(budget_match.group(1))
-            else:
-                print(f"Unable to extract budget value from file {csv_path}; please check file format.")
-                budget = None
-
-            time_line = lines[-4].strip()
-            time_match = re.search(r'Running time: (\d+\.?\d*) seconds', time_line)
-            if time_match:
-                time = float(time_match.group(1))
-            else:
-                print(f"Unable to extract time value from file {csv_path}; please check file format.")
-                time = None
-
-        return best_p, p_values_mean, ft, budget, time
-    except Exception as e:
-        print(f"Exception while processing file {csv_path}: {e}")
-        return None, None, None, None, None
-
-
-def read_sct_nsga2_data(nsga2_csv_dir, selected_datasets, selected_modes):
-    p_data = []
-    total_files = 0
-    valid_files = 0
-
-    for file in os.listdir(nsga2_csv_dir):
-        if file.endswith('.csv'):
-            total_files += 1
-            file_name = os.path.basename(file)
-            dataset_name, mode, is_reverse, seed = extract_info_from_filename_sct(file_name)
-
-            if dataset_name and dataset_name in selected_datasets and mode in selected_modes:
-                full_dataset_name = dataset_name
-                if is_reverse:
-                    full_dataset_name = f"{dataset_name}_reverse"
-
-                csv_path = os.path.join(nsga2_csv_dir, file)
-                best_p, p_values_mean, ft, budget, time = get_pareto_ratios_sct(csv_path)
-
-                if best_p is not None and p_values_mean is not None and budget is not None and time is not None:
-                    valid_files += 1
-                    p_data.append({
-                        'Random Seed': int(seed),
-                        'Dataset Name': full_dataset_name,
-                        'Best_Pareto_Ratio': best_p,
-                        'Pareto_Ratios_Mean': p_values_mean,
-                        'mode': mode,
-                        'ft': ft,
-                        'budget': budget,
-                        'time': time,
-                        'is_reverse': is_reverse
-                    })
-
-    print(f"SCT total files: {total_files}")
-    print(f"SCT valid files: {valid_files}")
-
-    if p_data:
-        p_df = pd.DataFrame(p_data)
-        group_cols = ['Dataset Name', 'mode']
-        numeric_cols = ['Best_Pareto_Ratio', 'Pareto_Ratios_Mean', 'ft', 'budget', 'time', 'Random Seed']
-
-        median_df = p_df.groupby(group_cols, as_index=False)[numeric_cols].median()
-        return median_df
-    else:
-        return pd.DataFrame()
-
 
 def read_sct_landscape_data(landscape_csv_dir, selected_datasets, start_seed, end_seed):
     landscape_dfs = []
@@ -540,58 +403,6 @@ def read_sct_sampling_data(sampling_csv_dir, selected_datasets, start_seed, end_
         print("No SCT sampling data found")
         return pd.DataFrame()
 
-
-def add_sct_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode='ft_only'):
-    ranked_df = p_df.copy()
-
-    ranked_df['ft_rank'] = 1
-    ranked_df['time_rank'] = 1
-    ranked_df['budget_rank'] = 1
-
-    group_columns = ['Dataset Name', 'Random Seed']
-
-    for group_key, group in ranked_df.groupby(group_columns):
-        dataset = group_key[0]
-        seed = group_key[1]
-
-        should_maximize = False
-        if dataset.endswith('_reverse'):
-            base_dataset = dataset.replace('_reverse', '')
-            should_maximize = base_dataset in reverse_maximize_datasets
-        else:
-            should_maximize = dataset in maximize_datasets
-
-        group = group.sort_values(by='time', ascending=True)
-        group['time_rank'] = range(1, len(group) + 1)
-
-        group = group.sort_values(by='budget', ascending=True)
-        group['budget_rank'] = range(1, len(group) + 1)
-
-        if ranking_mode == 'ft_only':
-            if should_maximize:
-                group = group.sort_values(by='ft', ascending=False)
-            else:
-                group = group.sort_values(by='ft', ascending=True)
-        elif ranking_mode == 'ft_time':
-            if should_maximize:
-                group = group.sort_values(by=['ft', 'time'], ascending=[False, True])
-            else:
-                group = group.sort_values(by=['ft', 'time'], ascending=[True, True])
-        elif ranking_mode == 'ft_mode':
-            group['mode_priority'] = group['mode'].map(MODE_PRIORITY_ORDER)
-            if should_maximize:
-                group = group.sort_values(by=['ft', 'mode_priority'], ascending=[False, True])
-            else:
-                group = group.sort_values(by=['ft', 'mode_priority'], ascending=[True, True])
-
-        group['ft_rank'] = range(1, len(group) + 1)
-
-        ranked_df.loc[group.index, ['ft_rank', 'time_rank', 'budget_rank']] = group[
-            ['ft_rank', 'time_rank', 'budget_rank']]
-
-    return ranked_df
-
-
 def filter_columns_by_nan(df):
     column_nan_counts = df.isna().sum()
     columns_to_drop = []
@@ -632,10 +443,8 @@ def coordinated_pipeline_sct(
         end_seed=None,
         pic_types=None,
         data_mode='three_datasets',
-        maximize_datasets=None,
-        reverse_maximize_datasets=None,
-        ranking_mode='ft_mode',
-        workflow_base_path='../Datasets/'
+        workflow_base_path='../Datasets/',
+        ranking_csv_path=None
 ):
     if selected_datasets is None:
         selected_datasets = ['dnn_adiac', 'dnn_coffee', 'dnn_dsr', 'dnn_sa',
@@ -656,14 +465,13 @@ def coordinated_pipeline_sct(
         end_seed = max(random_seeds)
     if pic_types is None:
         pic_types = ['PMO', 'MMO']
-    if maximize_datasets is None:
-        maximize_datasets = selected_datasets
-    if reverse_maximize_datasets is None:
-        reverse_maximize_datasets = []
 
-    print("=" * 60)
+    if ranking_csv_path is None:
+        print("Error: ranking_csv_path parameter must be provided")
+        print("Error: Please run the ranking analysis code first to generate the ranking results file and specify the file path")
+        return None
+
     print("Starting SCT Coordinated Data Processing Pipeline")
-    print("=" * 60)
     print(f"Configuration:")
     print(f"  Datasets: {selected_datasets}")
     print(f"  Modes: {selected_modes}")
@@ -673,15 +481,23 @@ def coordinated_pipeline_sct(
     print(f"  FA constructions: {fa_construction}")
     print(f"  Processing both forward and reverse data")
     print(f"  Number of datasets: {len(selected_datasets)}")
-    print("=" * 60)
+    print(f"  External ranking file: {ranking_csv_path}")
 
-    print("\nStage 1: Check SCT sampled data (both forward and reverse)")
+    print("Loading external ranking information from file")
+    external_ranking_dict = load_external_ranking_info(ranking_csv_path)
+
+    if external_ranking_dict is None:
+        print("Error: Unable to load external ranking information")
+        print("Error: Please ensure the ranking results file exists and has correct format")
+        return None
+
+    print("Stage 1: Check SCT sampled data (both forward and reverse)")
     sampling_data_exists = check_sct_sampling_data_exists(
         selected_datasets, sampling_methods, num_samples, random_seeds
     )
 
     if not sampling_data_exists:
-        print("Starting to generate SCT sampled data...")
+        print("Generating SCT sampled data...")
 
         print("Generating forward sampled data...")
         main_sct_multi(
@@ -720,7 +536,7 @@ def coordinated_pipeline_sct(
     else:
         print("SCT sampled data exists, skipping sampling stage")
 
-    print("\nStage 2: Check SCT multi-objective feature data (both forward and reverse)")
+    print("Stage 2: Check SCT multi-objective feature data (both forward and reverse)")
     multi_feature_data_exists = check_sct_multi_feature_data_exists(
         selected_datasets, selected_modes, sampling_methods
     )
@@ -765,7 +581,7 @@ def coordinated_pipeline_sct(
     else:
         print("SCT multi-objective feature data exists, skipping computation stage")
 
-    print("\nStage 3: Check SCT landscape feature data (both forward and reverse)")
+    print("Stage 3: Check SCT landscape feature data (both forward and reverse)")
     landscape_feature_data_exists = check_sct_landscape_feature_data_exists(selected_datasets)
 
     if not landscape_feature_data_exists:
@@ -800,35 +616,28 @@ def coordinated_pipeline_sct(
     else:
         print("SCT landscape feature data exists, skipping computation stage")
 
-    print("\nStage 4: Check SCT NSGA2 data (both forward and reverse)")
-    nsga2_data_exists = check_sct_nsga2_data_exists(selected_datasets, selected_modes, random_seeds)
+    print("Stage 4: Check SCT NSGA2 data (both forward and reverse)")
+    print("Skipping NSGA2 data check as only ranking information is needed")
 
-    if not nsga2_data_exists:
-        print("Warning: Some SCT NSGA2 data is missing. Ensure NSGA2 has been run and produced results")
-        print("Proceeding with available data...")
-
-    print("\nStage 5: SCT Data merging and processing (both forward and reverse)")
-
+    print("Stage 5: SCT Data merging and processing (both forward and reverse)")
     print("Starting SCT data merging...")
 
     landscape_df = read_sct_landscape_data('./Results/real_data/', selected_datasets, start_seed, end_seed)
-    p_df = read_sct_nsga2_data('../../../Results/RQ1-raw-data/SCT/', selected_datasets, selected_modes)
     combined_sampling_df = read_sct_sampling_data('./Results/Output-draw/', selected_datasets,
                                                   start_seed, end_seed, selected_modes, pic_types)
 
+    ranking_df = create_ranking_df_from_external(selected_datasets, selected_modes, external_ranking_dict)
+
     print(f"SCT landscape_df shape: {landscape_df.shape}")
     print(f"SCT combined_sampling_df shape: {combined_sampling_df.shape}")
-    print(f"SCT p_df shape: {p_df.shape}")
+    print(f"SCT ranking_df shape: {ranking_df.shape}")
 
     if landscape_df.empty:
         print("Warning: SCT Landscape data is empty")
     if combined_sampling_df.empty:
         print("Warning: SCT Sampling data is empty")
-    if p_df.empty:
-        print("Warning: SCT NSGA2 data is empty")
-
-    if not p_df.empty:
-        p_df = add_sct_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode)
+    if ranking_df.empty:
+        print("Warning: SCT Ranking data is empty")
 
     required_cols_landscape = ['Dataset Name', 'Sample Size', 'Sampling Method']
     required_cols_sampling = ['Dataset Name', 'mode', 'Sample Size', 'Sampling Method']
@@ -837,10 +646,10 @@ def coordinated_pipeline_sct(
     sampling_missing = [col for col in required_cols_sampling if col not in combined_sampling_df.columns]
 
     if landscape_missing:
-        print(f"SCT Landscape data missing required columns: {landscape_missing}")
+        print(f"Error: SCT Landscape data missing required columns: {landscape_missing}")
         return None
     if sampling_missing:
-        print(f"SCT Sampling data missing required columns: {sampling_missing}")
+        print(f"Error: SCT Sampling data missing required columns: {sampling_missing}")
         return None
 
     all_selected_datasets = selected_datasets + [f"{ds}_reverse" for ds in selected_datasets]
@@ -891,15 +700,15 @@ def coordinated_pipeline_sct(
                     how='inner'
                 )
 
-                p_df_filtered = p_df[
-                    (p_df['Dataset Name'] == dataset_name) &
-                    (p_df['mode'] == mode)
+                ranking_filtered = ranking_df[
+                    (ranking_df['Dataset Name'] == dataset_name) &
+                    (ranking_df['mode'] == mode)
                     ].copy()
 
-                if not p_df_filtered.empty:
+                if not ranking_filtered.empty:
                     combined_df = pd.merge(
                         combined_df,
-                        p_df_filtered,
+                        ranking_filtered,
                         on=['Dataset Name', 'mode'],
                         how='left'
                     )
@@ -932,29 +741,9 @@ def coordinated_pipeline_sct(
         output_filename = 'processed_data_sct.csv'
         output_path = os.path.join(output_folder, output_filename)
         processed_data.to_csv(output_path, index=False)
-        print(f"SCT Final processed data (combined forward and reverse) saved to: {output_path}")
+        print(f"SCT Final processed data saved to: {output_path}")
 
-        print("\nSCT Data summary:")
-        print(f"Total rows: {len(processed_data)}")
-        print(f"Total columns: {len(processed_data.columns)}")
-        print(f"Numeric columns: {len(processed_data.select_dtypes(include=[np.number]).columns)}")
-        print(f"Categorical columns: {len(processed_data.select_dtypes(include=['object']).columns)}")
-
-        if 'Dataset Name' in processed_data.columns:
-            dataset_counts = processed_data['Dataset Name'].value_counts()
-            print(f"\nDataset distribution:")
-            for dataset, count in dataset_counts.items():
-                print(f"  {dataset}: {count} rows")
-
-        forward_count = len([ds for ds in processed_data['Dataset Name'] if not ds.endswith('_reverse')])
-        reverse_count = len([ds for ds in processed_data['Dataset Name'] if ds.endswith('_reverse')])
-        print(f"\nForward data rows: {forward_count}")
-        print(f"Reverse data rows: {reverse_count}")
-
-        print("\n" + "=" * 60)
         print("SCT Data processing pipeline completed")
-        print("=" * 60)
-
         return processed_data
     else:
         print("No valid SCT data combinations generated")
@@ -962,12 +751,14 @@ def coordinated_pipeline_sct(
 
 
 if __name__ == "__main__":
+    ranking_csv_path = '../../../Results/Predict-raw-data/Ranking/non_ft_modes_ranking_sct.csv'
+
     processed_data = coordinated_pipeline_sct(
         selected_datasets=['dnn_adiac', 'dnn_coffee', 'dnn_dsr', 'dnn_sa',
-                             'llvm', 'lrzip', 'mariadb', 'mongodb', 'vp9', 'x264',
-                             'storm_rs', 'storm_wc', 'trimesh'],
+                           'llvm', 'lrzip', 'mariadb', 'mongodb', 'vp9', 'x264',
+                           'storm_rs', 'storm_wc', 'trimesh'],
         selected_modes=['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity'],
-        sampling_methods=['latin_hypercube', 'sobol', 'orthogonal', 'stratified', 'monte_carlo','covering_array'],
+        sampling_methods=['latin_hypercube', 'sobol', 'orthogonal', 'stratified', 'monte_carlo', 'covering_array'],
         random_seeds=range(0, 10),
         num_samples=900,
         fa_construction=['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity'],
@@ -977,6 +768,5 @@ if __name__ == "__main__":
         debug=True,
         pic_types=['PMO', 'MMO'],
         workflow_base_path='../Datasets/',
-        maximize_datasets=['storm_wc', 'storm_rs', 'storm_sol', 'dnn_dsr', 'dnn_coffee', 'dnn_adiac', 'x264',
-                           'trimesh', 'dnn_coffee', 'dnn_dsr']
+        ranking_csv_path=ranking_csv_path  # 必须提供的参数
     )
