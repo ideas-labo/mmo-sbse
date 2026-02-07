@@ -53,6 +53,7 @@ MMO-SBSE/
 │   │   │   ├── multi_feature.py  # Sample data and calculate multi-objective space features
 │   │   │   ├── single_feature.py  # Calculate single-objective space features
 │   │   │   └── utils/
+│   │   │       ├── calculate_rank.py  # Calculate mode rank
 │   │   │       └── multi_feature_compute.py  # Multi-objective space feature calculation function
 │   ├── NRP/  # Other SBSE problem folders (structure same as NAS, not expanded)
 │   ├── SCT/
@@ -121,14 +122,14 @@ The `MODES` argument maps to different auxiliary objective strategies in the pap
 
 
 ### 3. Example Execution
-#### 3.1 Run Multi-Objectivization (NAS as Reference)
+#### 3.1 Run MMO (NAS as Reference)
 > Note: Prepare NAS datasets first (see [_EvoXBench_](https://github.com/EMI-Group/evoxbench)).
 
 ```bash
 # Navigate to NAS folder
 cd Code/NAS
 
-# Run all modes with 30 CPU cores, seeds 0-4 (parallel enabled)
+# Run all modes with 50 CPU cores, seeds 0-4 (parallel enabled)
 python mmo_nas.py --cpu-cores 50 --seeds 0-4 --mode all
 
 # Run only 'ft_fa' mode with parallel disabled, single seed 5
@@ -138,16 +139,20 @@ python mmo_nas.py --no-parallel --mode ft_fa --seeds 5
 python mmo_nas.py --mode gaussian_fa --seeds 1,3,5
 ```
 
-#### 3.2 Run Prediction Pipeline (NAS as Reference)
+#### 3.2 Compute Features for Prediction
+We use the [_ScottKnott Effect Size Difference (ESD) test_](https://github.com/klainfo/ScottKnottESD) (Version 3.0, development branch) for ranking modes.
 ```bash
-# Navigate to NAS Feature folder
+# 1. Navigate to NAS Feature folder
 cd Code/NAS/Feature
 
-# Run default feature processing pipeline(specific parameters can be set in the code)
+# 2. Run calculate_rank.py to generate ranking information for modes
+python utils/calculate_rank.py
+
+# 3. Run feature processing pipeline (specific parameters can be set in the code)
 python feature_process.py
 ```
 
-#### 5.3 Run Mode Prediction
+#### 3.3 Run Mode Prediction
 ```bash
 # Navigate to Code root directory
 cd Code
@@ -223,6 +228,7 @@ The dataset includes the following components organized by research questions:
   - Random Search (RS) benchmark results
 
 ### 2. Predictive Modeling Data
+- **rANK data** for modes
 - **Feature data** used for training the auxiliary objective prediction model
 - **Sampling data** used to compute the feature values
 - **Prediction results** of auxiliary objective rankings across all SBSE problem instances
