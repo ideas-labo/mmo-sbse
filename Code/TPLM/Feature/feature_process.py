@@ -1,3 +1,4 @@
+import traceback
 from collections import defaultdict
 import pandas as pd
 import os
@@ -55,50 +56,6 @@ def check_sampling_data_exists(selected_datasets: List[str], sampling_methods: L
 
     print("All sampled data exists")
     return True
-
-
-def check_nsga2_data_exists(selected_datasets: List[str], selected_modes: List[str],
-                            random_seeds: range) -> bool:
-    base_dir = "../../../Results/RQ1-raw-data/TPLM"
-
-    if not os.path.exists(base_dir):
-        print(f"NSGA2 directory does not exist: {base_dir}")
-        return False
-
-    missing_files = []
-
-    for dataset in selected_datasets:
-        for mode in selected_modes:
-            for seed in random_seeds:
-                possible_files = [
-                    f"{dataset}_{seed}_{mode}.csv",
-                    f"{dataset}_{seed}_{mode}_fa.csv",
-                    f"{dataset}_{seed}_{mode}_maximization_fa.csv",
-                    f"{dataset}_{seed}_{mode}_g2.csv",
-                    f"{dataset}_reverse_{seed}_{mode}.csv",
-                    f"{dataset}_reverse_{seed}_{mode}_fa.csv",
-                    f"{dataset}_reverse_{seed}_{mode}_maximization_fa.csv",
-                    f"{dataset}_reverse_{seed}_{mode}_g2.csv"
-                ]
-
-                found = False
-                for filename in possible_files:
-                    file_path = os.path.join(base_dir, filename)
-                    if os.path.exists(file_path):
-                        found = True
-                        break
-
-                if not found:
-                    missing_files.append(f"{dataset}, {mode}, seed {seed}")
-                    print(f"Missing NSGA2 data: {dataset}, {mode}, seed {seed}")
-
-    if missing_files:
-        print(f"\nTotal missing NSGA2 files: {len(missing_files)}")
-        return False
-    else:
-        print("All NSGA2 data exists")
-        return True
-
 
 def check_multi_feature_data_exists(selected_datasets: List[str], selected_modes: List[str],
                                     sampling_methods: List[str]) -> bool:
@@ -186,70 +143,6 @@ def extract_info_from_filename(file_name, process_reverse=False):
     return dataset_name, mode, is_reverse, seed
 
 
-def get_pareto_ratios(csv_path):
-    try:
-        with open(csv_path, 'r') as file:
-            lines = file.readlines()
-
-            best_solution_text = next((line for line in lines if "Best Solution" in line), None)
-            if best_solution_text is None:
-                print(f"No 'Best Solution' line found in file {csv_path}")
-                return None, None, None, None, None
-            p_match = re.search(r'p: (\d+\.\d+)', best_solution_text)
-            if p_match:
-                best_p = float(p_match.group(1))
-            else:
-                print(f"Cannot extract Best Pareto ratio from file {csv_path}; check file format.")
-                return None, None, None, None, None
-
-            p_values_text = next((line for line in lines if "p values until best solution" in line), None)
-            if p_values_text is None:
-                print(f"No 'p values until best solution' line found in file {csv_path}")
-                return None, None, None, None, None
-            p_values_str_list = p_values_text.split(": ")[1].strip().split(",")
-
-            p_values = []
-            for p_str in p_values_str_list:
-                p_str = p_str.strip('"')
-                try:
-                    p = float(p_str)
-                    p_values.append(p)
-                except ValueError:
-                    print(f"Cannot convert p value '{p_str}' to float in file {csv_path}; check value format.")
-                    return None, None, None, None, None
-
-            p_values_mean = sum(p_values) / len(p_values)
-
-            ft_line = lines[-2].strip()
-            ft_match = re.search(r"'ft': (-?\d+\.?\d*)", ft_line)
-            if ft_match:
-                ft = float(ft_match.group(1))
-            else:
-                print(f"Cannot extract ft value from file {csv_path}; check file format.")
-                ft = None
-
-            budget_line = lines[-5].strip()
-            budget_match = re.search(r'budget_used:(\d+)', budget_line)
-            if budget_match:
-                budget = int(budget_match.group(1))
-            else:
-                print(f"Cannot extract budget value from file {csv_path}; check file format.")
-                budget = None
-
-            time_line = lines[-4].strip()
-            time_match = re.search(r'Running time: (\d+\.?\d*) seconds', time_line)
-            if time_match:
-                time = float(time_match.group(1))
-            else:
-                print(f"Cannot extract time value from file {csv_path}; check file format.")
-                time = None
-
-        return best_p, p_values_mean, ft, budget, time
-    except Exception as e:
-        print(f"Exception processing file {csv_path}: {e}")
-        return None, None, None, None, None
-
-
 def read_landscape_data(landscape_csv_dir, selected_datasets, start_seed, end_seed, process_reverse=False):
     landscape_dfs = []
     for file in os.listdir(landscape_csv_dir):
@@ -289,52 +182,6 @@ def read_landscape_data(landscape_csv_dir, selected_datasets, start_seed, end_se
     else:
         print("No landscape data found")
         return pd.DataFrame()
-
-
-def read_nsga2_data(nsga2_csv_dir, selected_datasets, selected_modes, process_reverse=False):
-    all_data = []
-    total_files = 0
-    valid_files = 0
-
-    for file in os.listdir(nsga2_csv_dir):
-        if file.endswith('.csv'):
-            total_files += 1
-            dataset_name, mode, is_reverse, seed = extract_info_from_filename(file, process_reverse)
-
-            if dataset_name in selected_datasets and mode in selected_modes:
-                csv_path = os.path.join(nsga2_csv_dir, file)
-                best_p, p_values_mean, ft, budget, time = get_pareto_ratios(csv_path)
-
-                if best_p is not None and p_values_mean is not None:
-                    valid_files += 1
-                    all_data.append({
-                        'Dataset Name': dataset_name,
-                        'mode': mode,
-                        'is_reverse': is_reverse,
-                        'Random Seed': int(seed),
-                        'Best_Pareto_Ratio': best_p,
-                        'Pareto_Ratios_Mean': p_values_mean,
-                        'ft': ft,
-                        'budget': budget,
-                        'time': time
-                    })
-
-    print(f"\nProcessing completed: total files {total_files}, valid files {valid_files}")
-
-    if all_data:
-        temp_df = pd.DataFrame(all_data)
-        temp_df = temp_df.dropna(subset=['ft', 'Best_Pareto_Ratio', 'Pareto_Ratios_Mean'])
-
-        group_keys = ['Dataset Name', 'mode', 'is_reverse']
-
-        numeric_cols = ['Best_Pareto_Ratio', 'Pareto_Ratios_Mean', 'ft', 'budget', 'time', 'Random Seed']
-
-        median_df = temp_df.groupby(group_keys, as_index=False)[numeric_cols].median()
-
-        return median_df
-    else:
-        return pd.DataFrame(columns=['Dataset Name', 'mode', 'is_reverse', 'Random Seed',
-                                     'Best_Pareto_Ratio', 'Pareto_Ratios_Mean', 'ft', 'budget', 'time'])
 
 
 def read_sampling_data(sampling_csv_dir, selected_datasets, start_seed, end_seed, selected_modes, pic_types,
@@ -407,146 +254,6 @@ def read_sampling_data(sampling_csv_dir, selected_datasets, start_seed, end_seed
         print("No sampling data found")
         return pd.DataFrame()
 
-
-def add_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode='ft_only'):
-    ranked_df = p_df.copy()
-
-    for (dataset, seed, is_reverse), group in ranked_df.groupby(['Dataset Name', 'Random Seed', 'is_reverse']):
-        if is_reverse:
-            should_maximize = dataset.replace("_reverse", "") in reverse_maximize_datasets
-        else:
-            should_maximize = dataset in maximize_datasets
-
-        if ranking_mode == 'ft_only':
-            if should_maximize:
-                ranked_df.loc[group.index, 'ft_rank'] = group['ft'].rank(ascending=False, method='min')
-            else:
-                ranked_df.loc[group.index, 'ft_rank'] = group['ft'].rank(ascending=True, method='min')
-
-        elif ranking_mode == 'ft_time':
-            if should_maximize:
-                ranked_df.loc[group.index, 'ft_rank'] = group.sort_values(
-                    by=['ft', 'time'], ascending=[False, True]
-                ).groupby('ft', sort=False).ngroup() + 1
-            else:
-                ranked_df.loc[group.index, 'ft_rank'] = group.sort_values(
-                    by=['ft', 'time'], ascending=[True, True]
-                ).groupby('ft', sort=False).ngroup() + 1
-
-        elif ranking_mode == 'ft_mode':
-            group_with_prio = group.copy()
-            group_with_prio['mode_priority'] = group_with_prio['mode'].map(MODE_PRIORITY_ORDER)
-
-            if should_maximize:
-                sorted_group = group_with_prio.sort_values(
-                    by=['ft', 'mode_priority'], ascending=[False, True]
-                )
-            else:
-                sorted_group = group_with_prio.sort_values(
-                    by=['ft', 'mode_priority'], ascending=[True, True]
-                )
-
-            sorted_group['ft_rank'] = range(1, len(sorted_group) + 1)
-            ranked_df.loc[sorted_group.index, 'ft_rank'] = sorted_group['ft_rank']
-
-        ranked_df.loc[group.index, 'time_rank'] = group['time'].rank(ascending=True, method='min')
-        ranked_df.loc[group.index, 'budget_rank'] = group['budget'].rank(ascending=True, method='min')
-
-    return ranked_df
-
-
-def process_three_datasets(landscape_df, p_df, combined_sampling_df, selected_datasets, selected_modes,
-                           maximize_datasets, reverse_maximize_datasets, ranking_mode='ft_only', process_reverse=False):
-    p_df = add_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode)
-
-    if 'Sampling Method' in landscape_df.columns and 'Sampling Method' in combined_sampling_df.columns and 'Sample Size' in landscape_df.columns and 'Sample Size' in combined_sampling_df.columns:
-        sampling_methods = pd.concat(
-            [landscape_df['Sampling Method'], combined_sampling_df['Sampling Method']]).unique()
-        sampling_sizes = combined_sampling_df['Sample Size'].unique()
-
-        combined_dfs = []
-        all_selected_datasets = [ds + '_reverse' for ds in
-                                 selected_datasets] + selected_datasets if process_reverse else selected_datasets
-
-        for dataset_name in all_selected_datasets:
-            is_reverse = dataset_name.endswith("_reverse") if process_reverse else False
-            base_dataset = dataset_name.replace("_reverse", "") if process_reverse else dataset_name
-
-            for sampling_method in sampling_methods:
-                for sampling_size in sampling_sizes:
-                    landscape_filtered = landscape_df[
-                        (landscape_df['Sampling Method'] == sampling_method) &
-                        (landscape_df['Sample Size'] == sampling_size) &
-                        (landscape_df['Dataset Name'] == dataset_name)
-                        ].copy()
-
-                    for mode in selected_modes:
-                        if mode == 'reciprocal':
-                            if not is_reverse and base_dataset in ['dnn_adiac', 'dnn_dsr', 'dnn_sa']:
-                                continue
-                            if is_reverse and base_dataset == 'x264':
-                                continue
-
-                        sampling_filtered = combined_sampling_df[
-                            (combined_sampling_df['Sampling Method'] == sampling_method) &
-                            (combined_sampling_df['Sample Size'] == sampling_size) &
-                            (combined_sampling_df['Dataset Name'] == dataset_name) &
-                            (combined_sampling_df['mode'] == mode)
-                            ].copy()
-
-                        column_mapping = {'Random Seed': 'Random Seed', 'Sample Size': 'Sample Size'}
-                        for old_col, new_col in column_mapping.items():
-                            if old_col in landscape_filtered.columns and new_col in sampling_filtered.columns:
-                                landscape_filtered.rename(columns={old_col: new_col}, inplace=True)
-
-                        landscape_filtered = landscape_filtered.sort_values(
-                            by=['Dataset Name', 'Random Seed', 'Sample Size']).reset_index(drop=True)
-                        sampling_filtered = sampling_filtered.sort_values(
-                            by=['Dataset Name', 'mode', 'Random Seed', 'Sample Size']).reset_index(drop=True)
-
-                        combined_df = pd.concat(
-                            [landscape_filtered.drop(columns=['Random Seed'], errors='ignore'), sampling_filtered],
-                            axis=1
-                        )
-
-                        p_df_filtered = p_df[
-                            (p_df['Dataset Name'] == dataset_name) &
-                            (p_df['mode'] == mode)
-                            ].sort_values(by=['Random Seed']).reset_index(drop=True)
-
-                        final_combined = pd.concat([combined_df, p_df_filtered], axis=1)
-                        combined_dfs.append(final_combined)
-
-        if combined_dfs:
-            all_combined_df = pd.concat(combined_dfs, ignore_index=True)
-            all_combined_df = all_combined_df.loc[:, ~all_combined_df.columns.duplicated()]
-
-            columns_to_keep = [
-                'Random Seed', 'Dataset Name', 'mode', 'Sample Size', 'Sampling Method',
-                'Best_Pareto_Ratio', 'Pareto_Ratios_Mean',
-                'ft', 'budget', 'time',
-                'ft_rank', 'time_rank', 'budget_rank'
-            ]
-            if process_reverse:
-                columns_to_keep.append('is_reverse')
-
-            numeric_columns = all_combined_df.select_dtypes(include=['number']).columns
-            columns_to_keep.extend([col for col in numeric_columns if col not in columns_to_keep])
-
-            X_numeric = all_combined_df[columns_to_keep].dropna(axis=1, how='all')
-            X_numeric = X_numeric.reset_index(drop=True)
-
-            X_numeric = X_numeric[
-                X_numeric['mode'].isin(p_df['mode']) &
-                X_numeric['Dataset Name'].isin(p_df['Dataset Name'])
-                ].reset_index(drop=True)
-
-            print(f"Final data shape: {X_numeric.shape}")
-            return X_numeric
-    print("Sampling Method and Sample Size columns do not match, cannot continue processing.")
-    return None
-
-
 def filter_columns_by_nan(df):
     column_nan_counts = df.isna().sum()
     columns_to_drop = []
@@ -570,6 +277,147 @@ def filter_columns_by_nan(df):
         return df
 
 
+def load_external_ranking_info(ranking_csv_path):
+    """
+    Load ranking information from external CSV file
+
+    Parameters:
+        ranking_csv_path: Path to ranking result CSV file
+
+    Returns:
+        ranking_dict: Dictionary, key is (dataset_name, mode), value is ranking info dictionary
+    """
+    if not os.path.exists(ranking_csv_path):
+        print(f"[ERROR] External ranking result file does not exist: {ranking_csv_path}")
+        print("[ERROR] Please run ranking analysis code first to generate ranking result file")
+        return None
+
+    try:
+        ranking_df = pd.read_csv(ranking_csv_path)
+
+        # Check required columns
+        required_cols = ['Dataset Name', 'mode', 'unique_rank']
+        missing_cols = [col for col in required_cols if col not in ranking_df.columns]
+        if missing_cols:
+            print(f"[ERROR] Ranking result file missing required columns: {missing_cols}")
+            print(f"Existing columns: {ranking_df.columns.tolist()}")
+            return None
+
+        ranking_dict = {}
+        for _, row in ranking_df.iterrows():
+            dataset_name = row['Dataset Name']
+            mode = row['mode']
+            unique_rank = row['unique_rank']
+
+            key = (dataset_name, mode)
+            ranking_dict[key] = {
+                'unique_rank': unique_rank,
+
+            }
+
+        print(
+            f"[INFO] Loaded ranking information for {len(ranking_dict)} dataset-mode combinations from {ranking_csv_path}")
+        return ranking_dict
+
+    except Exception as e:
+        print(f"[ERROR] Failed to read ranking result file: {e}")
+        return None
+
+
+def create_ranking_df_from_external_tplm(selected_datasets, selected_modes, ranking_dict, process_reverse=False):
+    """
+    Create TPLM ranking DataFrame from external ranking information
+
+    Parameters:
+        selected_datasets: List of selected datasets
+        selected_modes: List of selected modes
+        ranking_dict: Dictionary loaded from CSV
+        process_reverse: Whether to process reverse datasets
+
+    Returns:
+        ranking_df: DataFrame containing ranking information
+    """
+    ranking_data = []
+
+    # Handle regular and reverse datasets
+    all_dataset_variants = []
+    for dataset in selected_datasets:
+        all_dataset_variants.append(dataset)
+        if process_reverse:
+            all_dataset_variants.append(f"{dataset}_reverse")
+
+    for dataset_name in all_dataset_variants:
+        is_reverse = dataset_name.endswith("_reverse") and process_reverse
+        base_dataset = dataset_name.replace("_reverse", "") if is_reverse else dataset_name
+
+        for mode in selected_modes:
+            # Build key for lookup (using base dataset name)
+            key = (base_dataset, mode)
+
+            # Get ranking information
+            if key in ranking_dict:
+                rank_info = ranking_dict[key]
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': rank_info['unique_rank'],
+
+                })
+            else:
+                # No ranking information found, use default rank 1
+                print(
+                    f"[WARNING] No ranking information found for dataset '{dataset_name}' mode '{mode}', using default rank 1")
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': 1,
+
+                })
+
+    if ranking_data:
+        ranking_df = pd.DataFrame(ranking_data)
+        print(f"[INFO] Created ranking DataFrame with {len(ranking_df)} rows")
+        return ranking_df
+    else:
+        print("[WARNING] Could not create any ranking information")
+        return pd.DataFrame()
+
+
+def validate_ranking_coverage(ranking_df, selected_datasets, selected_modes, process_reverse=False):
+    """
+    Validate the coverage of ranking information
+
+    Parameters:
+        ranking_df: Ranking DataFrame
+        selected_datasets: List of selected datasets
+        selected_modes: List of selected modes
+        process_reverse: Whether reverse datasets are processed
+
+    Returns:
+        coverage_rate: Coverage rate of ranking information
+    """
+    # Calculate total combinations
+    all_dataset_variants = []
+    for dataset in selected_datasets:
+        all_dataset_variants.append(dataset)
+        if process_reverse:
+            all_dataset_variants.append(f"{dataset}_reverse")
+
+    total_combinations = len(all_dataset_variants) * len(selected_modes)
+
+    # Count unique combinations with valid ranking (not default rank 1)A
+    ranked_combinations = len(ranking_df[ranking_df['ft_rank'] > 0])
+
+    coverage_rate = ranked_combinations / total_combinations if total_combinations > 0 else 0
+
+    print(f"[INFO] Ranking coverage rate: {coverage_rate:.2%} ({ranked_combinations}/{total_combinations})")
+
+    if coverage_rate < 0.5:
+        print("[WARNING] Low ranking coverage rate, may need to regenerate ranking data")
+
+    return coverage_rate
+
+
 def coordinated_pipeline_tplm(
         selected_datasets=None,
         selected_modes=None,
@@ -590,8 +438,10 @@ def coordinated_pipeline_tplm(
         reverse_maximize_datasets=None,
         ranking_mode='ft_mode',
         process_reverse=False,
-        workflow_base_path='../Datasets/'
+        workflow_base_path='../Datasets/',
+        ranking_csv_path=None  # New parameter: path to ranking result CSV file
 ):
+    # Generate TPLM datasets if not provided
     if selected_datasets is None:
         selected_datasets = []
         migration_rules = ["migrationRule1", "migrationRule2", "migrationRule3", "migrationRule4", "migrationRule5",
@@ -606,38 +456,75 @@ def coordinated_pipeline_tplm(
 
     if selected_modes is None:
         selected_modes = ['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity']
+
     if sampling_methods is None:
         sampling_methods = ['sobol', 'orthogonal', 'stratified', 'latin_hypercube', 'monte_carlo', 'covering_array']
+
     if random_seeds is None:
         random_seeds = range(0, 10)
+
     if fa_construction is None:
         fa_construction = ['g1', 'penalty', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity']
+
     if start_seed is None:
         start_seed = min(random_seeds)
+
     if end_seed is None:
         end_seed = max(random_seeds)
+
     if pic_types is None:
         pic_types = ['PMO', 'MMO']
+
     if maximize_datasets is None:
         maximize_datasets = selected_datasets
+
     if reverse_maximize_datasets is None:
         reverse_maximize_datasets = []
 
+    # Check if ranking CSV path is provided
+    if ranking_csv_path is None:
+        print("[ERROR] Must provide ranking_csv_path parameter, specify the path to ranking result CSV file")
+        print(
+            "[ERROR] Please run ranking analysis code first to generate ranking result file, then specify the file path")
+        return None
+
     print("=" * 60)
-    print("Starting TPLM Coordinated Data Processing Pipeline")
+    print("Starting TPLM Coordinated Data Processing Pipeline with External Ranking")
     print("=" * 60)
     print(f"Configuration:")
-    print(f"  Datasets: {selected_datasets}")
+    print(f"  Number of datasets: {len(selected_datasets)}")
     print(f"  Modes: {selected_modes}")
     print(f"  Sampling methods: {sampling_methods}")
     print(f"  Random seeds: {list(random_seeds)}")
     print(f"  Sample size: {num_samples}")
-    print(f"  FA constructions: {fa_construction}")
-    print(f"  Number of datasets: {len(selected_datasets)}")
-    print(f"  Workflow base path: {workflow_base_path}")
+    print(f"  Process reverse: {process_reverse}")
+    print(f"  External ranking file: {ranking_csv_path}")
     print("=" * 60)
 
-    print("\nStage 1: Check sampled data")
+    # Load external ranking information
+    print(f"\n[INFO] Loading ranking information from external ranking result file: {ranking_csv_path}")
+    external_ranking_dict = load_external_ranking_info(ranking_csv_path)
+
+    if external_ranking_dict is None:
+        print(
+            "[ERROR] Unable to load external ranking information, please ensure ranking result file exists and format is correct")
+        print("[ERROR] Please run ranking analysis code first to generate ranking result file")
+        return None
+
+    # Create ranking DataFrame from external ranking information
+    ranking_df = create_ranking_df_from_external_tplm(
+        selected_datasets, selected_modes, external_ranking_dict, process_reverse
+    )
+
+    if ranking_df.empty:
+        print("[ERROR] Ranking DataFrame is empty, cannot proceed")
+        return None
+
+    # Validate ranking coverage
+    validate_ranking_coverage(ranking_df, selected_datasets, selected_modes, process_reverse)
+
+    # Data checking stages (keep these as they are needed for other data)
+    print("\nStage 1: Check TPLM sampled data")
     sampling_data_exists = check_sampling_data_exists(selected_datasets, sampling_methods, num_samples, random_seeds)
 
     if not sampling_data_exists:
@@ -670,7 +557,7 @@ def coordinated_pipeline_tplm(
     else:
         print("Sampled data exists, skipping sampling stage")
 
-    print("\nStage 2: Check multi-objective feature data")
+    print("\nStage 2: Check TPLM multi-objective feature data")
     multi_feature_data_exists = check_multi_feature_data_exists(selected_datasets, selected_modes, sampling_methods)
 
     if not multi_feature_data_exists:
@@ -702,7 +589,7 @@ def coordinated_pipeline_tplm(
     else:
         print("Multi-objective feature data exists, skipping computation stage")
 
-    print("\nStage 3: Check landscape feature data")
+    print("\nStage 3: Check TPLM landscape feature data")
     landscape_feature_data_exists = check_landscape_feature_data_exists(selected_datasets)
 
     if not landscape_feature_data_exists:
@@ -733,49 +620,27 @@ def coordinated_pipeline_tplm(
     else:
         print("Landscape feature data exists, skipping computation stage")
 
-    print("\nStage 4: Check NSGA2 data")
-    nsga2_data_exists = check_nsga2_data_exists(selected_datasets, selected_modes, random_seeds)
-
-    if not nsga2_data_exists:
-        print("Warning: Some NSGA2 data is missing. Ensure NSGA2 has been run and produced results")
-        print("Proceeding with available data...")
-
-    print("\nStage 5: Data merging and processing")
+    print("\nStage 4: TPLM Data merging and processing with external ranking (skipping NSGA2 data reading)")
 
     print("Starting data merging...")
 
     try:
+        # Read landscape feature data and sampling data (these are still needed)
         landscape_df = read_landscape_data('./Results/real_data/', selected_datasets, start_seed,
                                            end_seed, process_reverse)
-        p_df = read_nsga2_data('../../../Results/RQ1-raw-data/TPLM/', selected_datasets,
-                               selected_modes, process_reverse)
         combined_sampling_df = read_sampling_data('./Results/Output-draw/', selected_datasets,
                                                   start_seed, end_seed, selected_modes, pic_types, process_reverse)
 
-        print(f"landscape_df columns: {list(landscape_df.columns)}")
-        print(f"combined_sampling_df columns: {list(combined_sampling_df.columns)}")
-        print(f"p_df columns: {list(p_df.columns)}")
+        print(f"TPLM landscape_df shape: {landscape_df.shape}")
+        print(f"TPLM combined_sampling_df shape: {combined_sampling_df.shape}")
+        print(f"TPLM ranking_df shape: {ranking_df.shape}")
 
         if landscape_df.empty:
-            print("Warning: Landscape data is empty")
-        else:
-            print(f"Landscape data shape: {landscape_df.shape}")
-
+            print("Warning: TPLM Landscape data is empty")
         if combined_sampling_df.empty:
-            print("Warning: Sampling data is empty")
-        else:
-            print(f"Sampling data shape: {combined_sampling_df.shape}")
-
-        if p_df.empty:
-            print("Warning: NSGA2 data is empty")
-        else:
-            print(f"NSGA2 data shape: {p_df.shape}")
-
-        if not p_df.empty:
-            p_df = add_ranks(p_df, maximize_datasets, reverse_maximize_datasets, ranking_mode)
-            print(f"After ranking, p_df shape: {p_df.shape}")
-        else:
-            print("NSGA2 data is empty, cannot add ranks")
+            print("Warning: TPLM Sampling data is empty")
+        if ranking_df.empty:
+            print("Warning: TPLM Ranking data is empty")
 
         required_cols_landscape = ['Dataset Name', 'Sample Size', 'Sampling Method']
         required_cols_sampling = ['Dataset Name', 'mode', 'Sample Size', 'Sampling Method']
@@ -784,144 +649,156 @@ def coordinated_pipeline_tplm(
         sampling_missing = [col for col in required_cols_sampling if col not in combined_sampling_df.columns]
 
         if landscape_missing:
-            print(f"Landscape data missing required columns: {landscape_missing}")
+            print(f"TPLM Landscape data missing required columns: {landscape_missing}")
         if sampling_missing:
-            print(f"Sampling data missing required columns: {sampling_missing}")
+            print(f"TPLM Sampling data missing required columns: {sampling_missing}")
 
         if landscape_missing or sampling_missing:
             print("Cannot continue due to missing required columns")
             return None
 
-        sampling_methods_available = pd.concat(
-            [landscape_df['Sampling Method'], combined_sampling_df['Sampling Method']]).unique()
-        sampling_sizes = combined_sampling_df['Sample Size'].unique()
-
-        print(f"Available sampling methods: {sampling_methods_available}")
-        print(f"Available sampling sizes: {sampling_sizes}")
+        # Determine all dataset variants to process
+        all_dataset_variants = []
+        for dataset in selected_datasets:
+            all_dataset_variants.append(dataset)
+            if process_reverse:
+                all_dataset_variants.append(f"{dataset}_reverse")
 
         combined_dfs = []
-        all_selected_datasets = [ds + '_reverse' for ds in
-                                 selected_datasets] + selected_datasets if process_reverse else selected_datasets
 
-        print(f"Processing {len(all_selected_datasets)} datasets")
+        for dataset_name in all_dataset_variants:
+            landscape_filtered = landscape_df[landscape_df['Dataset Name'] == dataset_name].copy()
 
-        for dataset_name in all_selected_datasets:
-            is_reverse = dataset_name.endswith("_reverse") if process_reverse else False
-            base_dataset = dataset_name.replace("_reverse", "") if process_reverse else dataset_name
+            if landscape_filtered.empty:
+                continue
 
-            for sampling_method in sampling_methods_available:
-                for sampling_size in sampling_sizes:
-                    landscape_filtered = landscape_df[
-                        (landscape_df['Sampling Method'] == sampling_method) &
-                        (landscape_df['Sample Size'] == sampling_size) &
-                        (landscape_df['Dataset Name'] == dataset_name)
+            # Get unique combinations of sampling method and sample size
+            landscape_combinations = landscape_filtered[['Sampling Method', 'Sample Size']].drop_duplicates()
+
+            for _, combo in landscape_combinations.iterrows():
+                sampling_method = combo['Sampling Method']
+                sampling_size = combo['Sample Size']
+
+                landscape_specific = landscape_filtered[
+                    (landscape_filtered['Sampling Method'] == sampling_method) &
+                    (landscape_filtered['Sample Size'] == sampling_size)
+                    ].copy()
+
+                for mode in selected_modes:
+                    # Filter sampling data
+                    sampling_filtered = combined_sampling_df[
+                        (combined_sampling_df['Sampling Method'] == sampling_method) &
+                        (combined_sampling_df['Sample Size'] == sampling_size) &
+                        (combined_sampling_df['Dataset Name'] == dataset_name) &
+                        (combined_sampling_df['mode'] == mode)
                         ].copy()
 
-                    for mode in selected_modes:
-                        if mode == 'reciprocal':
-                            if not is_reverse and base_dataset in ['dnn_adiac', 'dnn_dsr', 'dnn_sa']:
-                                continue
-                            if is_reverse and base_dataset == 'x264':
-                                continue
+                    if sampling_filtered.empty:
+                        continue
 
-                        sampling_filtered = combined_sampling_df[
-                            (combined_sampling_df['Sampling Method'] == sampling_method) &
-                            (combined_sampling_df['Sample Size'] == sampling_size) &
-                            (combined_sampling_df['Dataset Name'] == dataset_name) &
-                            (combined_sampling_df['mode'] == mode)
-                            ].copy()
+                    # Merge landscape and sampling data
+                    combined_df = pd.merge(
+                        landscape_specific,
+                        sampling_filtered,
+                        on=['Dataset Name', 'Sample Size', 'Sampling Method', 'Random Seed'],
+                        how='inner'
+                    )
 
-                        column_mapping = {'Sample Size': 'Sample Size'}
-                        for old_col, new_col in column_mapping.items():
-                            if old_col in landscape_filtered.columns and new_col in sampling_filtered.columns:
-                                landscape_filtered.rename(columns={old_col: new_col}, inplace=True)
+                    # Add ranking information
+                    ranking_filtered = ranking_df[
+                        (ranking_df['Dataset Name'] == dataset_name) &
+                        (ranking_df['mode'] == mode)
+                        ].copy()
 
-                        sort_cols_landscape = [col for col in ['Dataset Name', 'Sample Size'] if
-                                               col in landscape_filtered.columns]
-                        sort_cols_sampling = [col for col in ['Dataset Name', 'mode', 'Sample Size'] if
-                                              col in sampling_filtered.columns]
+                    if not ranking_filtered.empty:
+                        # Merge ranking information
+                        combined_df = pd.merge(
+                            combined_df,
+                            ranking_filtered,
+                            on=['Dataset Name', 'mode'],
+                            how='left'
+                        )
 
-                        if sort_cols_landscape:
-                            landscape_filtered = landscape_filtered.sort_values(by=sort_cols_landscape).reset_index(
-                                drop=True)
-                        if sort_cols_sampling:
-                            sampling_filtered = sampling_filtered.sort_values(by=sort_cols_sampling).reset_index(
-                                drop=True)
-
-                        if not landscape_filtered.empty or not sampling_filtered.empty:
-                            combined_df = pd.concat([landscape_filtered, sampling_filtered], axis=1)
-
-                            p_df_filtered = p_df[
-                                (p_df['Dataset Name'] == dataset_name) &
-                                (p_df['mode'] == mode)
-                                ].sort_values(by=['Random Seed']).reset_index(drop=True)
-
-                            if not p_df_filtered.empty:
-                                final_combined = pd.concat([combined_df, p_df_filtered], axis=1)
-                                combined_dfs.append(final_combined)
+                    combined_dfs.append(combined_df)
 
         if combined_dfs:
             all_combined_df = pd.concat(combined_dfs, ignore_index=True)
+            print(f"TPLM All combined data shape: {all_combined_df.shape}")
+
+            # Remove duplicate columns
             all_combined_df = all_combined_df.loc[:, ~all_combined_df.columns.duplicated()]
 
-            print(f"Raw combined data shape: {all_combined_df.shape}")
-
-            columns_to_keep = [
-                'Dataset Name', 'mode', 'Sample Size', 'Sampling Method',
-                'Best_Pareto_Ratio', 'Pareto_Ratios_Mean',
-                'ft', 'budget', 'time',
-                'ft_rank', 'time_rank', 'budget_rank',
-                'Optimal_Best_Pareto_Ratio', 'Optimal_Pareto_Ratios_Mean',
-                'Percent_Diff_Best_P', 'Percent_Diff_P_Mean'
-            ]
+            # Select columns to keep
+            columns_to_keep = ['Dataset Name', 'mode', 'Sample Size', 'Sampling Method']
             if process_reverse:
                 columns_to_keep.append('is_reverse')
 
-            existing_columns = [col for col in columns_to_keep if col in all_combined_df.columns]
+            # Add numeric columns
             numeric_columns = all_combined_df.select_dtypes(include=['number']).columns
-            existing_columns.extend([col for col in numeric_columns if col not in existing_columns])
+            columns_to_keep.extend([col for col in numeric_columns if col not in columns_to_keep])
 
+            # Keep only existing columns
+            existing_columns = [col for col in columns_to_keep if col in all_combined_df.columns]
             processed_data = all_combined_df[existing_columns].dropna(axis=1, how='all')
             processed_data = processed_data.reset_index(drop=True)
 
-            if 'seed' in processed_data.columns:
-                processed_data = processed_data.rename(columns={'seed': 'Random Seed'})
+            print(f"TPLM Final data shape after column selection: {processed_data.shape}")
 
-            print(f"Final data shape before NaN filtering: {processed_data.shape}")
-
+            # Filter columns with too many NaN values
             processed_data = filter_columns_by_nan(processed_data)
 
+            # Save processed data
             output_folder = '../../../Results/Predict-raw-data/ProcessedData'
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
 
-            output_path = os.path.join(output_folder, 'processed_data_tplm.csv')
+            # Use filename indicating external ranking
+            output_filename = 'processed_data_tplm.csv'
+            output_path = os.path.join(output_folder, output_filename)
             processed_data.to_csv(output_path, index=False)
-            print(f"Final processed data saved to: {output_path}")
+            print(f"TPLM Final processed data saved to: {output_path}")
 
-            print("\nData summary:")
+            print("\nTPLM Data summary:")
             print(f"Total rows: {len(processed_data)}")
             print(f"Total columns: {len(processed_data.columns)}")
             print(f"Numeric columns: {len(processed_data.select_dtypes(include=[np.number]).columns)}")
             print(f"Categorical columns: {len(processed_data.select_dtypes(include=['object']).columns)}")
 
+            # Print dataset distribution
+            if 'Dataset Name' in processed_data.columns:
+                dataset_counts = processed_data['Dataset Name'].value_counts()
+                print(f"\nDataset distribution:")
+                for dataset, count in dataset_counts.items():
+                    print(f"  {dataset}: {count} rows")
+
+            # Print ranking statistics if available
+            if 'ft_rank' in processed_data.columns:
+                print(f"\nRanking statistics:")
+                rank_stats = processed_data['ft_rank'].value_counts().sort_index()
+                for rank, count in rank_stats.items():
+                    print(f"  Rank {rank}: {count} rows")
+
             print("\n" + "=" * 60)
-            print("TPLM Data processing pipeline completed")
+            print("TPLM Data processing pipeline with external ranking completed")
             print("=" * 60)
 
             return processed_data
         else:
-            print("No valid data combinations generated")
+            print("No valid TPLM data combinations generated")
             return None
 
     except Exception as e:
-        print(f"Data processing error: {e}")
-        import traceback
+        print(f"TPLM data processing error: {e}")
         traceback.print_exc()
         return None
 
 
+# Modified main calling part
 if __name__ == "__main__":
+    # Must provide ranking result CSV file path
+    ranking_csv_path = '../../../Results/Predict-raw-data/Ranking/non_ft_modes_ranking_tplm.csv'
+
+    # Generate TPLM datasets
     selected_datasets = []
     migration_rules = ["migrationRule1", "migrationRule2", "migrationRule3", "migrationRule4", "migrationRule5",
                        "migrationRule7", "migrationRule8", "migrationRule10", "migrationRule18"]
@@ -932,6 +809,7 @@ if __name__ == "__main__":
                 continue
             dataset = data + '_' + input_folder
             selected_datasets.append(dataset)
+
     processed_data = coordinated_pipeline_tplm(
         selected_datasets=selected_datasets,
         selected_modes=['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity'],
@@ -946,10 +824,11 @@ if __name__ == "__main__":
         debug=True,
         pic_types=['PMO', 'MMO'],
         process_reverse=False,
-        workflow_base_path='../Datasets/'
+        workflow_base_path='../Datasets/',
+        ranking_csv_path=ranking_csv_path  # Required parameter
     )
 
     if processed_data is not None:
-        print(f"Processing succeeded! Data shape: {processed_data.shape}")
+        print(f"TPLM Processing succeeded! Data shape: {processed_data.shape}")
     else:
-        print("Processing failed!")
+        print("TPLM Processing failed!")
