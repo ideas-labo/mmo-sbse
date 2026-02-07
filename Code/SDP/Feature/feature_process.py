@@ -52,45 +52,6 @@ def check_sdp_sampling_data_exists(selected_datasets: List[str], sampling_method
     print("All SDP sampled data exists")
     return True
 
-
-def check_sdp_nsga2_data_exists(selected_datasets: List[str], selected_modes: List[str],
-                                random_seeds: range) -> bool:
-    base_dir = "../../../Results/RQ1-raw-data/SDP"
-
-    if not os.path.exists(base_dir):
-        print(f"SDP NSGA2 directory does not exist: {base_dir}")
-        return False
-
-    missing_files = []
-
-    for dataset in selected_datasets:
-        for mode in selected_modes:
-            for seed in random_seeds:
-                possible_files = [
-                    f"{dataset}_{seed}_{mode}_g2.csv",
-                    f"{dataset}_{seed}_{mode}_fa.csv",
-                    f"{dataset}_{seed}_{mode}_maximization_fa.csv",
-                ]
-
-                found = False
-                for filename in possible_files:
-                    file_path = os.path.join(base_dir, filename)
-                    if os.path.exists(file_path):
-                        found = True
-                        break
-
-                if not found:
-                    missing_files.append(f"{dataset}, {mode}, seed {seed}")
-                    print(f"Missing SDP NSGA2 data: {dataset}, {mode}, seed {seed}")
-
-    if missing_files:
-        print(f"\nTotal missing SDP NSGA2 files: {len(missing_files)}")
-        return False
-    else:
-        print("All SDP NSGA2 data exists")
-        return True
-
-
 def check_sdp_multi_feature_data_exists(selected_datasets: List[str], selected_modes: List[str],
                                         sampling_methods: List[str]) -> bool:
     base_dir = "./Results/Output-draw/"
@@ -158,128 +119,6 @@ def check_sdp_landscape_feature_data_exists(selected_datasets: List[str]) -> boo
 
     print("All SDP landscape feature data exists")
     return True
-
-
-def extract_info_from_filename_sdp(file_name):
-    if file_name.endswith(".csv"):
-        file_name = file_name[:-4]
-    part = file_name.split('_')
-    if part:
-        dataset_name = part[0] + '_' + part[1]
-        seed = int(part[2])
-        mode = part[3]
-        return dataset_name, seed, mode
-
-    return None, None, None
-
-
-def get_pareto_ratios_sdp(csv_path):
-    try:
-        with open(csv_path, 'r') as file:
-            lines = file.readlines()
-
-            best_solution_text = next((line for line in lines if "Best Solution" in line), None)
-            if best_solution_text is None:
-                print(f"No 'Best Solution' line found in file {csv_path}")
-                return None, None, None, None, None
-
-            p_match = re.search(r'p: (\d+\.\d+)', best_solution_text)
-            if p_match:
-                best_p = float(p_match.group(1))
-            else:
-                print(f"Cannot extract Best Pareto ratio from file {csv_path}; check file format.")
-                return None, None, None, None, None
-
-            p_values_text = next((line for line in lines if "p values until best solution" in line), None)
-            if p_values_text is None:
-                print(f"No 'p values until best solution' line found in file {csv_path}")
-                return None, None, None, None, None
-
-            p_values_str_list = p_values_text.split(": ")[1].strip().split(",")
-
-            p_values = []
-            for p_str in p_values_str_list:
-                p_str = p_str.strip('"')
-                try:
-                    p = float(p_str)
-                    p_values.append(p)
-                except ValueError:
-                    print(f"Cannot convert p value '{p_str}' to float in file {csv_path}; check format.")
-                    return None, None, None, None, None
-
-            p_values_mean = sum(p_values) / len(p_values)
-
-            ft_line = lines[-3].strip()
-            ft_match = re.search(r"'test_auc': (-?\d+\.?\d*)", ft_line)
-            if ft_match:
-                ft = float(ft_match.group(1))
-            else:
-                print(f"Cannot extract ft value from file {csv_path}; check file format.")
-                ft = None
-
-            budget_line = lines[-6].strip()
-            budget_match = re.search(r'budget_used:(\d+)', budget_line)
-            if budget_match:
-                budget = int(budget_match.group(1))
-            else:
-                print(f"Cannot extract budget value from file {csv_path}; check file format.")
-                budget = None
-
-            time_line = lines[-5].strip()
-            time_match = re.search(r'Running time: (\d+\.?\d*) seconds', time_line)
-            if time_match:
-                time = float(time_match.group(1))
-            else:
-                print(f"Cannot extract time value from file {csv_path}; check file format.")
-                time = None
-
-        return best_p, p_values_mean, ft, budget, time
-    except Exception as e:
-        print(f"Exception processing file {csv_path}: {e}")
-        return None, None, None, None, None
-
-
-def read_sdp_nsga2_data(nsga2_csv_dir, selected_datasets, selected_modes):
-    p_data = []
-    total_files = 0
-    valid_files = 0
-
-    for file in os.listdir(nsga2_csv_dir):
-        if file.endswith('.csv'):
-            total_files += 1
-            file_name = os.path.basename(file)
-            dataset_name, seed, mode = extract_info_from_filename_sdp(file_name)
-
-            if dataset_name and dataset_name in selected_datasets and mode in selected_modes:
-                csv_path = os.path.join(nsga2_csv_dir, file)
-                best_p, p_values_mean, ft, budget, time = get_pareto_ratios_sdp(csv_path)
-
-                if best_p is not None and p_values_mean is not None and budget is not None and time is not None:
-                    valid_files += 1
-                    p_data.append({
-                        'Random Seed': seed,
-                        'Dataset Name': dataset_name,
-                        'Best_Pareto_Ratio': best_p,
-                        'Pareto_Ratios_Mean': p_values_mean,
-                        'mode': mode,
-                        'ft': ft,
-                        'budget': budget,
-                        'time': time
-                    })
-
-    print(f"SDP total files: {total_files}")
-    print(f"SDP valid files: {valid_files}")
-
-    if p_data:
-        p_df = pd.DataFrame(p_data)
-        group_cols = ['Dataset Name', 'mode']
-        numeric_cols = ['Best_Pareto_Ratio', 'Pareto_Ratios_Mean', 'ft', 'budget', 'time', 'Random Seed']
-
-        median_df = p_df.groupby(group_cols, as_index=False)[numeric_cols].median()
-        return median_df
-    else:
-        return pd.DataFrame()
-
 
 def read_sdp_landscape_data(landscape_csv_dir, selected_datasets, start_seed, end_seed):
     landscape_dfs = []
@@ -417,53 +256,6 @@ def read_sdp_sampling_data(sampling_csv_dir, selected_datasets, start_seed, end_
         print("No SDP sampling data found")
         return pd.DataFrame()
 
-
-def add_sdp_ranks(p_df, maximize_datasets, ranking_mode='ft_only'):
-    ranked_df = p_df.copy()
-
-    ranked_df['ft_rank'] = 1
-    ranked_df['time_rank'] = 1
-    ranked_df['budget_rank'] = 1
-
-    group_columns = ['Dataset Name', 'Random Seed']
-
-    for group_key, group in ranked_df.groupby(group_columns):
-        dataset = group_key[0]
-        seed = group_key[1]
-
-        should_maximize = dataset in maximize_datasets
-
-        group = group.sort_values(by='time', ascending=True)
-        group['time_rank'] = range(1, len(group) + 1)
-
-        group = group.sort_values(by='budget', ascending=True)
-        group['budget_rank'] = range(1, len(group) + 1)
-
-        if ranking_mode == 'ft_only':
-            if should_maximize:
-                group = group.sort_values(by='ft', ascending=False)
-            else:
-                group = group.sort_values(by='ft', ascending=True)
-        elif ranking_mode == 'ft_time':
-            if should_maximize:
-                group = group.sort_values(by=['ft', 'time'], ascending=[False, True])
-            else:
-                group = group.sort_values(by=['ft', 'time'], ascending=[True, True])
-        elif ranking_mode == 'ft_mode':
-            group['mode_priority'] = group['mode'].map(MODE_PRIORITY_ORDER)
-            if should_maximize:
-                group = group.sort_values(by=['ft', 'mode_priority'], ascending=[False, True])
-            else:
-                group = group.sort_values(by=['ft', 'mode_priority'], ascending=[True, True])
-
-        group['ft_rank'] = range(1, len(group) + 1)
-
-        ranked_df.loc[group.index, ['ft_rank', 'time_rank', 'budget_rank']] = group[
-            ['ft_rank', 'time_rank', 'budget_rank']]
-
-    return ranked_df
-
-
 def filter_columns_by_nan(df):
     column_nan_counts = df.isna().sum()
     columns_to_drop = []
@@ -480,13 +272,85 @@ def filter_columns_by_nan(df):
                 columns_to_drop.append(col)
 
     if columns_to_drop:
-        print(f"\nColumns meeting NaN criteria will be dropped (count={len(columns_to_drop)}):")
+        print(f"Columns meeting NaN criteria will be dropped (count={len(columns_to_drop)}):")
         for col in columns_to_drop:
             print(f"- {col} (NaN count: {column_nan_counts[col]})")
         return df.drop(columns=columns_to_drop)
     else:
-        print("\nNo columns met the NaN criteria")
+        print("No columns met the NaN criteria")
         return df
+
+
+def load_external_ranking_info(ranking_csv_path):
+    if not os.path.exists(ranking_csv_path):
+        print(f"Error: External ranking file does not exist: {ranking_csv_path}")
+        print("Error: Please run ranking analysis code to generate ranking result file first")
+        return None
+
+    try:
+        ranking_df = pd.read_csv(ranking_csv_path)
+
+        required_cols = ['Dataset Name', 'mode', 'unique_rank']
+        missing_cols = [col for col in required_cols if col not in ranking_df.columns]
+        if missing_cols:
+            print(f"Error: Ranking result file missing required columns: {missing_cols}")
+            print(f"Existing columns: {ranking_df.columns.tolist()}")
+            return None
+
+        ranking_dict = {}
+        for _, row in ranking_df.iterrows():
+            dataset_name = row['Dataset Name']
+            mode = row['mode']
+            unique_rank = row['unique_rank']
+
+            key = (dataset_name, mode)
+            ranking_dict[key] = {
+                'unique_rank': unique_rank,
+                'is_best': 'is_best' in row and row['is_best'],
+
+            }
+
+        print(f"Information: Loaded ranking information for {len(ranking_dict)} datasets from {ranking_csv_path}")
+        return ranking_dict
+
+    except Exception as e:
+        print(f"Error: Failed to read ranking result file: {e}")
+        return None
+
+
+def create_ranking_df_from_external_sdp(selected_datasets_fold, selected_modes, ranking_dict):
+    ranking_data = []
+
+    for dataset_name in selected_datasets_fold:
+        for mode in selected_modes:
+            key = (dataset_name, mode)
+
+            if key in ranking_dict:
+                rank_info = ranking_dict[key]
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': rank_info['unique_rank'],
+                    'is_best_mode': rank_info.get('is_best', False),
+
+                })
+            else:
+                print(f"Warning: No ranking information found for dataset '{dataset_name}' mode '{mode}', using default rank 1")
+                ranking_data.append({
+                    'Dataset Name': dataset_name,
+                    'mode': mode,
+                    'ft_rank': 1,
+                    'is_best_mode': False,
+
+                })
+
+    if ranking_data:
+        ranking_df = pd.DataFrame(ranking_data)
+        print(f"Information: Created ranking DataFrame with {len(ranking_df)} rows for SDP")
+        return ranking_df
+    else:
+        print("Warning: Failed to create any SDP ranking information")
+        return pd.DataFrame()
 
 
 def coordinated_pipeline_sdp(
@@ -504,16 +368,15 @@ def coordinated_pipeline_sdp(
         end_seed=None,
         pic_types=None,
         data_mode='three_datasets',
-        maximize_datasets=None,
-        ranking_mode='ft_mode',
         workflow_base_path='../Datasets/',
-        classifiers=None
+        classifiers=None,
+        ranking_csv_path=None
 ):
     reverse = False
 
     if selected_datasets is None:
         selected_datasets = ['ant-1.7', 'camel-1.6', 'ivy-2.0', 'jedit-4.0', 'lucene-2.4',
-                           'poi-3.0', 'synapse-1.2', 'velocity-1.6', 'xalan-2.6', 'xerces-1.4']
+                             'poi-3.0', 'synapse-1.2', 'velocity-1.6', 'xalan-2.6', 'xerces-1.4']
     if selected_modes is None:
         selected_modes = ['penalty', 'g1', 'gaussian', 'reciprocal', 'age', 'novelty', 'diversity']
     if sampling_methods is None:
@@ -528,8 +391,11 @@ def coordinated_pipeline_sdp(
         end_seed = max(random_seeds)
     if pic_types is None:
         pic_types = ['PMO', 'MMO']
-    if maximize_datasets is None:
-        maximize_datasets = selected_datasets
+
+    if ranking_csv_path is None:
+        print("Error: ranking_csv_path parameter is required")
+        print("Error: Please run ranking analysis code to generate ranking result file first, then specify the file path")
+        return None
 
     if classifiers is None:
         from sklearn.tree import DecisionTreeClassifier
@@ -543,27 +409,38 @@ def coordinated_pipeline_sdp(
             "LR": LogisticRegression(max_iter=1000, random_state=42),
             "NB": GaussianNB()
         }
-    selected_datasets_fold=[]
+
+    selected_datasets_fold = []
     input_folders = [key for key in classifiers.keys()]
     for rule in selected_datasets:
         for folder in input_folders:
             dataset = f"{rule}_{folder}"
             selected_datasets_fold.append(dataset)
+
+    print(f"Information: Loading ranking information from external ranking result file: {ranking_csv_path}")
+    external_ranking_dict = load_external_ranking_info(ranking_csv_path)
+
+    if external_ranking_dict is None:
+        print("Error: Unable to load external ranking information")
+        print("Error: Please run ranking analysis code to generate ranking result file first")
+        return None
+
     print("=" * 60)
     print("Starting SDP Coordinated Data Processing Pipeline")
     print("=" * 60)
     print(f"Configuration:")
     print(f"  Datasets: {selected_datasets}")
+    print(f"  Datasets with classifiers: {len(selected_datasets_fold)}")
     print(f"  Modes: {selected_modes}")
     print(f"  Sampling methods: {sampling_methods}")
     print(f"  Random seeds: {list(random_seeds)}")
     print(f"  Sample size: {num_samples}")
     print(f"  FA constructions: {fa_construction}")
     print(f"  Reverse: {reverse} (fixed to False)")
-    print(f"  Number of datasets: {len(selected_datasets)}")
+    print(f"  External ranking file: {ranking_csv_path}")
     print("=" * 60)
 
-    print("\nStage 1: Check SDP sampled data")
+    print("Stage 1: Check SDP sampled data")
     sampling_data_exists = check_sdp_sampling_data_exists(
         selected_datasets_fold, sampling_methods, num_samples, random_seeds
     )
@@ -590,7 +467,7 @@ def coordinated_pipeline_sdp(
     else:
         print("SDP sampled data exists, skipping sampling stage")
 
-    print("\nStage 2: Check SDP multi-objective feature data")
+    print("Stage 2: Check SDP multi-objective feature data")
     multi_feature_data_exists = check_sdp_multi_feature_data_exists(
         selected_datasets_fold, selected_modes, sampling_methods
     )
@@ -617,7 +494,7 @@ def coordinated_pipeline_sdp(
     else:
         print("SDP multi-objective feature data exists, skipping computation stage")
 
-    print("\nStage 3: Check SDP landscape feature data")
+    print("Stage 3: Check SDP landscape feature data")
     landscape_feature_data_exists = check_sdp_landscape_feature_data_exists(selected_datasets_fold)
 
     if not landscape_feature_data_exists:
@@ -637,35 +514,29 @@ def coordinated_pipeline_sdp(
     else:
         print("SDP landscape feature data exists, skipping computation stage")
 
-    print("\nStage 4: Check SDP NSGA2 data")
-    nsga2_data_exists = check_sdp_nsga2_data_exists(selected_datasets_fold, selected_modes, random_seeds)
+    print("Stage 4: Check SDP NSGA2 data")
+    print("Information: Skipping NSGA2 data check, only ranking information is needed")
 
-    if not nsga2_data_exists:
-        print("Warning: Some SDP NSGA2 data is missing. Ensure NSGA2 has been run and produced results")
-        print("Proceeding with available data...")
-
-    print("\nStage 5: SDP Data merging and processing")
+    print("Stage 5: SDP Data merging and processing")
 
     print("Starting SDP data merging...")
 
     landscape_df = read_sdp_landscape_data('./Results/real_data/', selected_datasets_fold, start_seed, end_seed)
-    p_df = read_sdp_nsga2_data('../../../Results/RQ1-raw-data/SDP/', selected_datasets_fold, selected_modes)
     combined_sampling_df = read_sdp_sampling_data('./Results/Output-draw/', selected_datasets_fold,
                                                   start_seed, end_seed, selected_modes, pic_types)
 
+    ranking_df = create_ranking_df_from_external_sdp(selected_datasets_fold, selected_modes, external_ranking_dict)
+
     print(f"SDP landscape_df shape: {landscape_df.shape}")
     print(f"SDP combined_sampling_df shape: {combined_sampling_df.shape}")
-    print(f"SDP p_df shape: {p_df.shape}")
+    print(f"SDP ranking_df shape: {ranking_df.shape}")
 
     if landscape_df.empty:
         print("Warning: SDP Landscape data is empty")
     if combined_sampling_df.empty:
         print("Warning: SDP Sampling data is empty")
-    if p_df.empty:
-        print("Warning: SDP NSGA2 data is empty")
-
-    if not p_df.empty:
-        p_df = add_sdp_ranks(p_df, maximize_datasets, ranking_mode)
+    if ranking_df.empty:
+        print("Warning: SDP Ranking data is empty")
 
     combined_dfs = []
 
@@ -704,15 +575,15 @@ def coordinated_pipeline_sdp(
                     how='inner'
                 )
 
-                p_df_filtered = p_df[
-                    (p_df['Dataset Name'] == dataset_name) &
-                    (p_df['mode'] == mode)
+                ranking_filtered = ranking_df[
+                    (ranking_df['Dataset Name'] == dataset_name) &
+                    (ranking_df['mode'] == mode)
                     ].copy()
 
-                if not p_df_filtered.empty:
+                if not ranking_filtered.empty:
                     combined_df = pd.merge(
                         combined_df,
-                        p_df_filtered,
+                        ranking_filtered,
                         on=['Dataset Name', 'mode'],
                         how='left'
                     )
@@ -742,12 +613,12 @@ def coordinated_pipeline_sdp(
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
-        output_filename = 'processed_data_sdp.csv'
+        output_filename = 'processed_data_sdp_external_ranking.csv'
         output_path = os.path.join(output_folder, output_filename)
         processed_data.to_csv(output_path, index=False)
         print(f"SDP Final processed data saved to: {output_path}")
 
-        print("\nSDP Data summary:")
+        print("SDP Data summary:")
         print(f"Total rows: {len(processed_data)}")
         print(f"Total columns: {len(processed_data.columns)}")
         print(f"Numeric columns: {len(processed_data.select_dtypes(include=[np.number]).columns)}")
@@ -755,11 +626,17 @@ def coordinated_pipeline_sdp(
 
         if 'Dataset Name' in processed_data.columns:
             dataset_counts = processed_data['Dataset Name'].value_counts()
-            print(f"\nDataset distribution:")
+            print("Dataset distribution:")
             for dataset, count in dataset_counts.items():
                 print(f"  {dataset}: {count} rows")
 
-        print("\n" + "=" * 60)
+        if 'ft_rank' in processed_data.columns:
+            print("Ranking statistics:")
+            rank_stats = processed_data['ft_rank'].value_counts().sort_index()
+            for rank, count in rank_stats.items():
+                print(f"  Rank {rank}: {count} rows")
+
+        print("=" * 60)
         print("SDP Data processing pipeline completed")
         print("=" * 60)
 
@@ -767,7 +644,6 @@ def coordinated_pipeline_sdp(
     else:
         print("No valid SDP data combinations generated")
         return None
-
 
 if __name__ == "__main__":
     from sklearn.tree import DecisionTreeClassifier
@@ -783,7 +659,9 @@ if __name__ == "__main__":
     }
 
     selected_datasets = ['ant-1.7', 'camel-1.6', 'ivy-2.0', 'jedit-4.0', 'lucene-2.4',
-                       'poi-3.0', 'synapse-1.2', 'velocity-1.6', 'xalan-2.6', 'xerces-1.4']
+                         'poi-3.0', 'synapse-1.2', 'velocity-1.6', 'xalan-2.6', 'xerces-1.4']
+
+    ranking_csv_path = '../../../Results/Predict-raw-data/Ranking/non_ft_modes_ranking_sdp.csv'
 
     processed_data = coordinated_pipeline_sdp(
         selected_datasets=selected_datasets,
@@ -798,6 +676,6 @@ if __name__ == "__main__":
         debug=True,
         pic_types=['PMO', 'MMO'],
         workflow_base_path='../Datasets/',
-        maximize_datasets=selected_datasets,
-        classifiers=CLASSIFIERS
+        classifiers=CLASSIFIERS,
+        ranking_csv_path=ranking_csv_path
     )
